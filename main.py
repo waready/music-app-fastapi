@@ -34,6 +34,57 @@ def db_write(db: Dict[str, Any]): save_json(DB_FILE, db)
 def q_read() -> List[str]: return load_json(Q_FILE, [])
 def q_write(q: List[str]): save_json(Q_FILE, q)
 
+# ---- Búsqueda en YouTube ----
+def _search_youtube(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
+    """Buscar videos en YouTube usando yt-dlp"""
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': True,
+        'default_search': 'ytsearch',
+    }
+
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            search_query = f"ytsearch{max_results}:{query}"
+            results = ydl.extract_info(search_query, download=False)
+
+            if not results or 'entries' not in results:
+                return []
+
+            formatted_results = []
+            for item in results['entries']:
+                if item:
+                    video_id = item.get('id')
+                    # Formato compatible con frontend
+                    formatted_results.append({
+                        'id': {
+                            'kind': 'youtube#video',
+                            'videoId': video_id
+                        },
+                        'snippet': {
+                            'title': item.get('title'),
+                            'description': item.get('description', '')[:100] if item.get('description') else '',
+                            'thumbnails': {
+                                'default': {'url': f"https://i.ytimg.com/vi/{video_id}/default.jpg"},
+                                'medium': {'url': f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg"},
+                                'high': {'url': f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"}
+                            },
+                            'channelTitle': item.get('channel') or item.get('uploader', 'Unknown'),
+                        },
+                        'duration': item.get('duration', 0),
+                        'url': f"https://www.youtube.com/watch?v={video_id}"
+                    })
+
+            return formatted_results
+    except Exception as e:
+        print(f"Error searching YouTube: {e}")
+        return []
+
+async def search_youtube_async(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
+    """Ejecuta búsqueda en hilo para no bloquear el loop"""
+    return await asyncio.to_thread(_search_youtube, query, max_results)
+
 # ---- Descarga / Registro con yt-dlp ----
 def _download_yt_to_mp3(url_or_id: str) -> Dict[str, Any]:
     # Si ya tenemos metadata + archivo, no descargamos
@@ -254,6 +305,21 @@ async def api_queue():
 async def api_queue_next():
     await cmd_next()
     return {"ok": True}
+
+@app.get("/api/search")
+async def api_search(q: str, maxResults: int = 20):
+    """Buscar música en YouTube"""
+    if not q:
+        return JSONResponse({"error": "Query parameter 'q' is required"}, status_code=400)
+
+    results = await search_youtube_async(q, maxResults)
+    return {
+        "items": results,
+        "pageInfo": {
+            "totalResults": len(results),
+            "resultsPerPage": maxResults
+        }
+    }
 
 # Streaming con soporte de Range
 @app.get("/stream/{track_id}")

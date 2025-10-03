@@ -306,8 +306,14 @@ async def api_queue_next():
     await cmd_next()
     return {"ok": True}
 
+@app.post("/api/download")
+async def api_download_track(payload: TrackIn):
+    """Descarga una canción sin agregarla a la cola principal (para playlists)"""
+    rec = await ensure_track(payload.urlOrId)
+    return rec
+
 @app.get("/api/search")
-async def api_search(q: str, maxResults: int = 20):
+async def api_search(q: str, maxResults: int = 30):
     """Buscar música en YouTube"""
     if not q:
         return JSONResponse({"error": "Query parameter 'q' is required"}, status_code=400)
@@ -350,6 +356,48 @@ def stream(request: Request, track_id: str):
         "Content-Type": "audio/mpeg",
     }
     return StreamingResponse(ranged_stream(file_path, start, end), status_code=206, headers=headers)
+
+@app.get("/ready/{video_id}")
+def check_ready(video_id: str):
+    """Verifica si un video está descargado y listo para reproducir"""
+    file_path = os.path.join(MEDIA_DIR, f"{video_id}.mp3")
+    db = db_read()
+
+    # Verificar si existe el archivo y está en la base de datos
+    if os.path.exists(file_path) and video_id in db:
+        file_size = os.path.getsize(file_path)
+        return JSONResponse({
+            "ready": True,
+            "id": video_id,
+            "status": "completed",
+            "progress": 100,
+            "file_size": file_size
+        }, status_code=200)
+    else:
+        # Verificar si está en proceso de descarga
+        partial_file = os.path.join(MEDIA_DIR, f"{video_id}.mp3.part")
+        temp_file = os.path.join(MEDIA_DIR, f"{video_id}.temp")
+
+        progress = 0
+        status = "not_found"
+
+        # Buscar archivos temporales o parciales
+        for temp_path in [partial_file, temp_file]:
+            if os.path.exists(temp_path):
+                status = "downloading"
+                # Estimar progreso basado en tamaño del archivo temporal
+                temp_size = os.path.getsize(temp_path)
+                if temp_size > 0:
+                    # Estimación muy básica - en un caso real necesitarías más información
+                    progress = min(50, (temp_size // 1024) // 10)  # Progreso estimado
+                break
+
+        return JSONResponse({
+            "ready": False,
+            "id": video_id,
+            "status": status,
+            "progress": progress
+        }, status_code=404)
 
 @app.get("/", response_class=HTMLResponse)
 def index():

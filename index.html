@@ -378,6 +378,56 @@
       gap: 0.5rem;
       flex: 1;
       justify-content: flex-end;
+      min-width: 180px;
+    }
+
+    .volume-slider {
+      width: 100px;
+      height: 4px;
+      background: var(--spotify-hover);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    .volume-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 12px;
+      height: 12px;
+      background: var(--spotify-text);
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .volume-slider::-webkit-slider-thumb:hover {
+      background: var(--spotify-green);
+      transform: scale(1.2);
+    }
+
+    .volume-slider::-moz-range-thumb {
+      width: 12px;
+      height: 12px;
+      background: var(--spotify-text);
+      border-radius: 50%;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+
+    .volume-slider::-moz-range-thumb:hover {
+      background: var(--spotify-green);
+      transform: scale(1.2);
+    }
+
+    .volume-slider::-moz-range-track {
+      width: 100%;
+      height: 4px;
+      background: var(--spotify-hover);
+      border-radius: 2px;
     }
 
     /* Hidden elements */
@@ -481,6 +531,459 @@
       border-color: var(--spotify-green);
       box-shadow: 0 0 0 2px rgba(29, 185, 84, 0.2);
     }
+
+    /* Spotify-style notification */
+    .spotify-notification {
+      position: fixed;
+      top: 2rem;
+      right: 2rem;
+      background-color: var(--spotify-green);
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 0.375rem;
+      font-weight: 500;
+      font-size: 0.875rem;
+      z-index: 9999;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      opacity: 0;
+      transform: translateX(20px);
+      transition: all 0.3s ease;
+      max-width: 300px;
+    }
+
+    .spotify-notification.show {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    .spotify-notification.hide {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+
+    /* Playlist mini player inline style */
+    .playlist-mini-player-inline {
+      background: var(--spotify-light-gray);
+      border-radius: 0.5rem;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+
+    /* Mobile header */
+    .mobile-header {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3.5rem;
+      background: var(--spotify-black);
+      border-bottom: 1px solid var(--spotify-gray);
+      z-index: 1000;
+      align-items: center;
+      padding: 0 1rem;
+      justify-content: space-between;
+    }
+
+    .mobile-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--spotify-text);
+    }
+
+    .hamburger-btn {
+      background: none;
+      border: none;
+      color: var(--spotify-text);
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 0.5rem;
+      border-radius: 0.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .hamburger-btn:hover {
+      background: var(--spotify-hover);
+    }
+
+    /* Mobile sidebar overlay */
+    .sidebar-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1001;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+
+    .sidebar-overlay.show {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .sidebar-mobile {
+      position: fixed;
+      top: 0;
+      left: -16rem;
+      width: 16rem;
+      height: 100vh;
+      background: var(--spotify-black);
+      transition: left 0.3s ease;
+      z-index: 1002;
+      overflow-y: auto;
+      border-right: 1px solid var(--spotify-gray);
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .sidebar-mobile.open {
+      left: 0;
+    }
+
+    /* Ensure mobile sidebar only shows on mobile */
+    @media (min-width: 769px) {
+      .mobile-header,
+      .sidebar-overlay,
+      .sidebar-mobile {
+        display: none !important;
+      }
+    }
+
+    /* Responsive design */
+    @media (max-width: 768px) {
+      .mobile-header {
+        display: flex;
+      }
+
+      .main-layout {
+        flex-direction: column;
+        padding-top: 3.5rem;
+      }
+
+      .sidebar {
+        display: none;
+      }
+
+      .content {
+        width: 100%;
+        overflow-x: hidden;
+      }
+
+      .content-header {
+        padding: 1rem;
+        overflow-x: hidden;
+      }
+
+      .content-body {
+        padding: 1rem;
+        overflow-x: hidden;
+      }
+
+      .track-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .track-info {
+        margin-bottom: 0.5rem;
+        width: 100%;
+        overflow: hidden;
+      }
+
+      .track-controls {
+        width: 100%;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+
+      .playlist-mini-player-inline {
+        padding: 0.5rem;
+        margin-bottom: 1rem;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .playlist-mini-player-inline img {
+        width: 2.5rem !important;
+        height: 2.5rem !important;
+      }
+
+      .playlist-mini-player-inline .control-btn {
+        padding: 0.375rem !important;
+      }
+
+      .playlist-mini-player-inline .icon {
+        width: 1rem !important;
+        height: 1rem !important;
+      }
+
+      .playlist-mini-player-inline .volume-slider {
+        min-width: 3rem !important;
+        max-width: 5rem !important;
+      }
+
+      .spotify-notification {
+        right: 1rem;
+        top: 1rem;
+        max-width: calc(100vw - 2rem);
+      }
+
+      /* Ensure all song items fit properly */
+      .song-item {
+        width: 100%;
+        box-sizing: border-box;
+        overflow: hidden;
+        flex-wrap: nowrap;
+      }
+
+      .song-info {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        margin-right: 0.5rem;
+      }
+
+      .song-title {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+
+      .song-artist {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+
+      .song-actions {
+        flex-shrink: 0;
+        display: flex;
+        gap: 0.25rem;
+      }
+
+      /* Ensure song grid doesn't overflow */
+      .song-grid {
+        width: 100%;
+        overflow-x: hidden;
+      }
+
+      /* Page titles should not overflow */
+      .page-title {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .content-header {
+        padding: 0.75rem;
+      }
+
+      .content-body {
+        padding: 0.75rem;
+      }
+
+      .track-item {
+        padding: 0.75rem;
+      }
+
+      .playlist-mini-player-inline {
+        padding: 0.375rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .playlist-mini-player-inline img {
+        width: 2rem !important;
+        height: 2rem !important;
+      }
+
+      .playlist-mini-player-inline .control-btn {
+        padding: 0.25rem !important;
+        min-width: 2rem;
+        height: 2rem;
+      }
+
+      .playlist-mini-player-inline .play-pause-btn {
+        min-width: 2.5rem;
+        height: 2.5rem;
+      }
+
+      .playlist-mini-player-inline .icon {
+        width: 0.875rem !important;
+        height: 0.875rem !important;
+      }
+
+      .playlist-mini-player-inline .volume-slider {
+        min-width: 2.5rem !important;
+        max-width: 4rem !important;
+        margin: 0 0.25rem !important;
+      }
+
+      /* Compact layout for mobile */
+      .playlist-mini-player-inline > div:first-child {
+        margin-bottom: 0.5rem !important;
+      }
+
+      .playlist-mini-player-inline > div:nth-child(2) {
+        margin-bottom: 0.5rem !important;
+      }
+
+      .playlist-mini-player-inline > div:last-child {
+        font-size: 0.625rem !important;
+        margin-top: 0.25rem !important;
+      }
+
+      .page-title {
+        font-size: 1.5rem;
+      }
+
+      .results-title {
+        font-size: 1.25rem;
+      }
+
+      /* Ensure song list is visible */
+      .song-grid {
+        margin-top: 0.5rem;
+      }
+
+      .song-item {
+        padding: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .song-thumbnail {
+        width: 3rem !important;
+        height: 3rem !important;
+      }
+
+      /* Mobile responsive for playlist buttons */
+      .content-body .play-btn,
+      .content-body .queue-btn {
+        padding: 0.75rem !important;
+        min-width: 3rem !important;
+        justify-content: center !important;
+      }
+
+      .playlist-btn-text {
+        display: none !important;
+      }
+
+      .playlist-btn-icon {
+        display: block !important;
+        width: 1.25rem !important;
+        height: 1.25rem !important;
+      }
+
+      /* Stack buttons horizontally with equal spacing */
+      .content-body > .queue-section > div:first-child {
+        justify-content: space-between !important;
+        gap: 0.5rem !important;
+        width: 100%;
+        box-sizing: border-box;
+        flex-wrap: wrap;
+      }
+
+      /* Mobile responsive for individual song buttons */
+      .song-btn-text {
+        display: none !important;
+      }
+
+      .song-btn-icon {
+        display: block !important;
+        width: 1rem !important;
+        height: 1rem !important;
+      }
+
+      .song-play-btn,
+      .song-remove-btn {
+        padding: 0.5rem !important;
+        min-width: 2.5rem !important;
+        height: 2.5rem !important;
+        justify-content: center !important;
+        display: flex !important;
+        align-items: center !important;
+      }
+
+      /* Ultra-mobile optimizations for very small screens */
+      .song-item {
+        padding: 0.375rem !important;
+        gap: 0.375rem !important;
+        flex-direction: row !important;
+        align-items: center !important;
+      }
+
+      .song-thumbnail {
+        width: 2.5rem !important;
+        height: 2.5rem !important;
+        flex-shrink: 0;
+      }
+
+      .song-info {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        margin-right: 0.25rem;
+      }
+
+      .song-title {
+        font-size: 0.875rem !important;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 0.125rem;
+      }
+
+      .song-artist {
+        font-size: 0.75rem !important;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .page-title {
+        font-size: 1.25rem !important;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Ensure containers don't overflow */
+      .app-container,
+      .main-layout,
+      .content,
+      .content-body,
+      .queue-section {
+        max-width: 100vw;
+        overflow-x: hidden;
+        box-sizing: border-box;
+      }
+
+      /* Compact playlist buttons layout */
+      .content-body .play-btn,
+      .content-body .queue-btn {
+        flex: 1;
+        min-width: 0;
+        max-width: calc(33.333% - 0.33rem);
+      }
+    }
   </style>
 </head>
 <body>
@@ -489,6 +992,72 @@
     <div class="connection-status" :class="connected ? 'connected' : 'disconnected'">
       {{ connected ? '🟢 Conectado' : '🔴 Desconectado' }}
     </div>
+
+    <!-- Mobile Header -->
+    <div class="mobile-header">
+      <div class="mobile-title">🎵 Music Player</div>
+      <button class="hamburger-btn" @click="toggleMobileMenu">
+        <svg viewBox="0 0 24 24" style="width: 1.5rem; height: 1.5rem;" fill="currentColor">
+          <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Mobile Sidebar Overlay -->
+    <div class="sidebar-overlay" :class="{ 'show': showMobileMenu }" @click="closeMobileMenu"></div>
+
+    <!-- Mobile Sidebar -->
+    <nav class="sidebar-mobile" :class="{ 'open': showMobileMenu }">
+      <div class="sidebar-logo">
+        <h1>🎵 Music Player</h1>
+      </div>
+
+      <div class="sidebar-nav">
+        <a href="#" class="nav-item" :class="{ active: currentPage === 'home' }" @click="setCurrentPageMobile('home')">
+          <svg class="nav-icon" viewBox="0 0 24 24">
+            <path d="M12 2.1l9 8.1v11.8h-6v-7h-6v7H3V10.2l9-8.1z"/>
+          </svg>
+          <span>Inicio</span>
+        </a>
+
+        <a href="#" class="nav-item" :class="{ active: currentPage === 'search' }" @click="setCurrentPageMobile('search')">
+          <svg class="nav-icon" viewBox="0 0 24 24">
+            <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+          </svg>
+          <span>Buscar</span>
+        </a>
+
+        <a href="#" class="nav-item" :class="{ active: currentPage === 'library' }" @click="setCurrentPageMobile('library')">
+          <svg class="nav-icon" viewBox="0 0 24 24">
+            <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/>
+          </svg>
+          <span>Tu biblioteca</span>
+        </a>
+
+        <a href="#" class="nav-item" :class="{ active: currentPage === 'liked' }" @click="setCurrentPageMobile('liked')">
+          <svg class="nav-icon" viewBox="0 0 24 24">
+            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+          </svg>
+          <span>Canciones que te gustan</span>
+        </a>
+
+        <div style="border-top: 1px solid var(--spotify-gray); margin: 1rem 0; padding-top: 1rem;">
+          <h3 style="color: var(--spotify-text-subdued); font-size: 0.875rem; margin-bottom: 0.5rem; padding: 0 1rem;">PLAYLISTS</h3>
+          <div v-if="!playlists.length" style="color: var(--spotify-text-subdued); font-size: 0.875rem; padding: 0 1rem;">
+            No hay playlists
+          </div>
+          <a v-for="playlist in playlists" :key="playlist.id" href="#"
+             class="nav-item"
+             :class="{ active: currentPage === 'playlist' && currentPlaylist && currentPlaylist.id === playlist.id }"
+             @click="setCurrentPlaylistMobile(playlist)">
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/>
+            </svg>
+            <span>{{ playlist.name }}</span>
+          </a>
+        </div>
+      </div>
+    </nav>
 
     <div class="main-layout">
       <!-- Sidebar -->
@@ -536,6 +1105,38 @@
               </svg>
             </div>
             <span style="font-size: 0.875rem;">Canciones que te gustan</span>
+          </div>
+
+          <div style="margin: 1rem 0;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+              <h4 style="color: var(--spotify-text-subdued); font-size: 0.875rem; font-weight: 500;">Playlists</h4>
+              <button @click="showCreatePlaylist = true" class="control-btn" style="padding: 0.25rem;">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                </svg>
+              </button>
+            </div>
+
+            <div v-for="playlist in playlists" :key="playlist.id"
+                 style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem; border-radius: 0.375rem; cursor: pointer; transition: background-color 0.2s;"
+                 @click="openPlaylist(playlist)">
+              <div style="width: 2rem; height: 2rem; background: var(--spotify-light-gray); border-radius: 0.25rem; display: flex; align-items: center; justify-content: center;">
+                <svg style="width: 1rem; height: 1rem; fill: var(--spotify-text-subdued);" viewBox="0 0 24 24">
+                  <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/>
+                </svg>
+              </div>
+              <div style="flex: 1; min-width: 0;">
+                <div style="font-size: 0.875rem; color: var(--spotify-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ playlist.name }}</div>
+                <div style="font-size: 0.75rem; color: var(--spotify-text-subdued);">{{ playlist.songs.length }} canciones</div>
+              </div>
+            </div>
+
+            <div v-if="!playlists.length" style="text-align: center; color: var(--spotify-text-subdued); padding: 1rem; font-size: 0.875rem;">
+              <p>No tienes playlists</p>
+              <button @click="showCreatePlaylist = true" style="color: var(--spotify-green); background: none; border: none; cursor: pointer; margin-top: 0.5rem;">
+                Crear tu primera playlist
+              </button>
+            </div>
           </div>
         </div>
       </nav>
@@ -621,12 +1222,42 @@
             <!-- Search Results -->
             <div v-if="searchResults.length" class="results-section">
               <div class="results-header">
-                <h2 class="results-title">Resultados de búsqueda ({{ searchResults.length }})</h2>
+                <div>
+                  <h2 class="results-title">Resultados de búsqueda ({{ searchResults.length }})</h2>
+                  <p style="color: var(--spotify-text-subdued); font-size: 0.875rem; margin-top: 0.25rem;">
+                    Página {{ currentSearchPage + 1 }} de {{ totalSearchPages }} • Mostrando {{ paginatedSearchResults.length }} canciones
+                  </p>
+                </div>
                 <button class="close-btn" @click="clearSearch">✕</button>
               </div>
 
+              <!-- Pagination Controls -->
+              <div style="display: flex; justify-content: center; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                <button @click="prevSearchPage"
+                        :disabled="!hasPrevPage"
+                        class="control-btn"
+                        :style="{ opacity: hasPrevPage ? 1 : 0.5, cursor: hasPrevPage ? 'pointer' : 'not-allowed' }">
+                  <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+                  </svg>
+                </button>
+
+                <span style="color: var(--spotify-text); font-weight: 500; min-width: 120px; text-align: center;">
+                  {{ currentSearchPage + 1 }} / {{ totalSearchPages }}
+                </span>
+
+                <button @click="nextSearchPage"
+                        :disabled="!hasNextPage"
+                        class="control-btn"
+                        :style="{ opacity: hasNextPage ? 1 : 0.5, cursor: hasNextPage ? 'pointer' : 'not-allowed' }">
+                  <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+                  </svg>
+                </button>
+              </div>
+
               <div class="song-grid">
-                <div v-for="song in searchResults" :key="song.id.videoId" class="song-item">
+                <div v-for="song in paginatedSearchResults" :key="song.id.videoId" class="song-item">
                   <img :src="song.snippet.thumbnails.medium.url" :alt="song.snippet.title" class="song-thumbnail">
                   <div class="song-info">
                     <div class="song-title">{{ song.snippet.title }}</div>
@@ -643,6 +1274,34 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                       </svg>
                     </button>
+
+                    <!-- Playlist dropdown -->
+                    <div style="position: relative; display: inline-block;">
+                      <button @click.stop="togglePlaylistDropdown(song)" class="control-btn" style="margin-right: 0.5rem;">
+                        <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"/>
+                        </svg>
+                      </button>
+
+                      <div v-show="song._showPlaylists" style="position: absolute; top: 100%; left: 0; background: var(--spotify-light-gray); border-radius: 0.375rem; padding: 0.5rem; min-width: 150px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                        <div v-if="!playlists.length" style="color: var(--spotify-text-subdued); font-size: 0.75rem; text-align: center; padding: 0.5rem;">
+                          <p>No hay playlists</p>
+                          <button @click.stop="showCreatePlaylist = true; song._showPlaylists = false" style="color: var(--spotify-green); background: none; border: none; cursor: pointer; margin-top: 0.25rem; font-size: 0.75rem;">
+                            Crear playlist
+                          </button>
+                        </div>
+                        <div v-else>
+                          <div v-for="playlist in playlists" :key="playlist.id"
+                               @click.stop="addToPlaylist(playlist.id, song.id.videoId, song.snippet.title); song._showPlaylists = false"
+                               style="padding: 0.5rem; cursor: pointer; border-radius: 0.25rem; transition: background-color 0.2s; font-size: 0.75rem; color: var(--spotify-text);"
+                               @mouseover="$event.target.style.backgroundColor = 'var(--spotify-hover)'"
+                               @mouseout="$event.target.style.backgroundColor = 'transparent'">
+                            {{ playlist.name }}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     <button class="play-btn" @click="playNow(song.id.videoId)">
                       ▶ Reproducir
                     </button>
@@ -720,6 +1379,178 @@
             </div>
           </div>
         </div>
+
+        <!-- Playlist Page -->
+        <div v-if="currentPage === 'playlist' && currentPlaylist">
+          <div class="content-header">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+              <button @click="setCurrentPage('library')" class="control-btn">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+                </svg>
+              </button>
+              <div>
+                <h1 class="page-title">{{ currentPlaylist.name }}</h1>
+                <p style="color: var(--spotify-text-subdued); font-size: 0.875rem;">{{ currentPlaylist.songs.length }} canciones</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="content-body">
+            <div class="queue-section">
+              <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                <button v-if="currentPlaylist.songs.length" @click="playPlaylist(currentPlaylist)"
+                        class="play-btn playlist-play-btn" style="padding: 0.75rem 1.5rem; font-size: 1rem;">
+                  <svg class="icon playlist-btn-icon" style="display: none;" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                  <span class="playlist-btn-text">▶ Reproducir playlist</span>
+                </button>
+                <button v-if="currentPlaylist.songs.length" @click="shufflePlayPlaylist(currentPlaylist)"
+                        class="play-btn playlist-shuffle-btn" style="padding: 0.75rem 1.5rem; font-size: 1rem; background: var(--spotify-light-gray); color: var(--spotify-text);">
+                  <svg class="icon playlist-btn-icon" style="display: none;" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M14.83 13.41L13.42 12L20 5.41L18.59 4l-6.58 6.59L5.41 4L4 5.41l6.59 6.59L4 18.59L5.41 20l6.59-6.59L18.59 20L20 18.59z"/>
+                  </svg>
+                  <span class="playlist-btn-text">🔀 Aleatorio</span>
+                </button>
+                <button @click="deletePlaylist(currentPlaylist.id)"
+                        class="queue-btn playlist-delete-btn" style="color: #ef4444; border-color: #ef4444;">
+                  <svg class="icon playlist-btn-icon" style="display: none;" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                  </svg>
+                  <span class="playlist-btn-text">🗑️ Eliminar</span>
+                </button>
+              </div>
+
+              <!-- Playlist Mini Player positioned below song count -->
+              <div v-if="playlistPlayer.audio && getCurrentPlaylistSong()" class="playlist-mini-player-inline">
+                <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+                  <img :src="getCurrentPlaylistSong().thumbnail"
+                       :alt="getCurrentPlaylistSong().title"
+                       style="width: 3rem; height: 3rem; border-radius: 0.25rem; object-fit: cover;">
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 0.875rem; font-weight: 500; color: var(--spotify-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                      {{ getCurrentPlaylistSong().title }}
+                    </div>
+                    <div style="font-size: 0.75rem; color: var(--spotify-text-subdued);">
+                      {{ getCurrentPlaylistSong().channel || 'Desconocido' }}
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Compact controls: prev, play, next + volume in one line -->
+                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+                  <button @click="prevPlaylistSong()" class="control-btn">
+                    <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+                    </svg>
+                  </button>
+
+                  <button @click="playlistPlayer.isPlaying ? pausePlaylist() : resumePlaylist()"
+                          class="control-btn play-pause-btn">
+                    <svg v-if="playlistPlayer.isPlaying" class="icon" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                    </svg>
+                    <svg v-else class="icon" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
+                  </button>
+
+                  <button @click="nextPlaylistSong()" class="control-btn">
+                    <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+                    </svg>
+                  </button>
+
+                  <!-- Volume control in same line -->
+                  <button @click="togglePlaylistMute()" class="control-btn" style="padding: 0.25rem; margin-left: 0.5rem;">
+                    <svg v-if="!playlistPlayer.isMuted && playlistPlayer.volume > 0.5" class="icon" style="width: 1rem; height: 1rem;" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                    </svg>
+                    <svg v-else-if="!playlistPlayer.isMuted && playlistPlayer.volume > 0" class="icon" style="width: 1rem; height: 1rem;" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/>
+                    </svg>
+                    <svg v-else class="icon" style="width: 1rem; height: 1rem;" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/>
+                    </svg>
+                  </button>
+
+                  <input type="range"
+                         min="0"
+                         max="1"
+                         step="0.01"
+                         :value="playlistPlayer.isMuted ? 0 : playlistPlayer.volume"
+                         @input="setPlaylistVolume($event.target.value)"
+                         class="volume-slider"
+                         style="flex: 1; cursor: pointer; margin: 0 0.5rem;">
+
+                  <span style="font-size: 0.75rem; color: var(--spotify-text-subdued); min-width: 3rem; text-align: center;">
+                    {{ Math.round((playlistPlayer.isMuted ? 0 : playlistPlayer.volume) * 100) }}%
+                  </span>
+                </div>
+
+                <!-- Progress bar with seek functionality -->
+                <div style="margin-bottom: 0.5rem;">
+                  <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--spotify-text-subdued);">
+                    <span style="min-width: 2.5rem; text-align: right;">{{ mmss(playlistPlayer.currentTime) }}</span>
+                    <div @click="seekPlaylistAudio($event)"
+                         style="flex: 1; height: 0.25rem; background: var(--spotify-light-gray); border-radius: 0.125rem; cursor: pointer; position: relative;">
+                      <div :style="{
+                        width: playlistPlayer.duration ? (playlistPlayer.currentTime / playlistPlayer.duration * 100) + '%' : '0%',
+                        height: '100%',
+                        background: 'var(--spotify-green)',
+                        borderRadius: '0.125rem',
+                        transition: 'width 0.1s'
+                      }"></div>
+                    </div>
+                    <span style="min-width: 2.5rem;">{{ mmss(playlistPlayer.duration) }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="!currentPlaylist.songs.length" class="queue-empty">
+                <p>Esta playlist está vacía</p>
+                <p style="font-size: 0.875rem; margin-top: 0.5rem;">Busca música y agrégala usando el botón de playlist</p>
+              </div>
+
+              <div v-else class="song-grid">
+                <div v-for="(song, index) in currentPlaylist.songs" :key="`${song.id}-${index}`" class="song-item">
+                  <img :src="song.thumbnail" :alt="song.title" class="song-thumbnail">
+                  <div class="song-info">
+                    <div class="song-title">{{ song.title }}</div>
+                    <div class="song-artist" style="display: flex; align-items: center; gap: 0.5rem;">
+                      <span>Agregada {{ formatDate(song.addedAt) }}</span>
+                      <span :style="{
+                        color: getPlaylistSongStatusColor(song.id),
+                        fontSize: '0.65rem',
+                        fontWeight: '500'
+                      }">
+                        {{ getPlaylistSongStatusText(song.id) }}
+                      </span>
+                    </div>
+                  </div>
+                  <div class="song-actions">
+                    <button class="play-btn song-play-btn" @click="playPlaylist(currentPlaylist, index)"
+                            :disabled="!isPlaylistSongReady(song.id)"
+                            :style="{ opacity: !isPlaylistSongReady(song.id) ? '0.5' : '1', cursor: !isPlaylistSongReady(song.id) ? 'not-allowed' : 'pointer' }">
+                      <svg class="icon song-btn-icon" style="display: none;" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8 5v14l11-7z"/>
+                      </svg>
+                      <span class="song-btn-text">▶ Reproducir</span>
+                    </button>
+                    <button class="close-btn song-remove-btn" @click="removeFromPlaylist(currentPlaylist.id, song.id)" style="margin-left: 0.5rem; color: var(--spotify-text-subdued);">
+                      <svg class="icon song-btn-icon" style="display: none;" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                      </svg>
+                      <span class="song-btn-text">✕</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
       </main>
     </div>
 
@@ -769,12 +1600,71 @@
       </div>
 
       <div class="player-volume">
-        <!-- Volume controls can be added here -->
+        <button @click="toggleMute" class="control-btn">
+          <svg v-if="muted || volume === 0" class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+          </svg>
+          <svg v-else-if="volume < 0.3" class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M7 9v6h4l5 5V4l-5 5H7z"/>
+          </svg>
+          <svg v-else-if="volume < 0.7" class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/>
+          </svg>
+          <svg v-else class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+          </svg>
+        </button>
+
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          :value="volume"
+          @input="setVolume($event.target.value)"
+          class="volume-slider"
+        >
+
+        <span style="color: var(--spotify-text-subdued); font-size: 0.75rem; min-width: 30px; text-align: center;">
+          {{ Math.round(volume * 100) }}%
+        </span>
       </div>
     </div>
 
     <!-- Hidden Audio Element -->
     <audio id="audio" :src="audioSrc" preload="auto" playsinline class="hidden"></audio>
+
+    <!-- Create Playlist Modal -->
+    <div v-if="showCreatePlaylist" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000;">
+      <div style="background: var(--spotify-light-gray); border-radius: 0.5rem; padding: 2rem; max-width: 400px; width: 90%;">
+        <h2 style="margin-bottom: 1.5rem; color: var(--spotify-text);">Crear nueva playlist</h2>
+
+        <input
+          v-model="newPlaylistName"
+          @keyup.enter="createNewPlaylist"
+          placeholder="Nombre de la playlist"
+          style="width: 100%; background: var(--spotify-gray); color: var(--spotify-text); border: 1px solid var(--spotify-hover); border-radius: 0.375rem; padding: 0.75rem; margin-bottom: 1.5rem;"
+          autofocus>
+
+        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+          <button @click="showCreatePlaylist = false; newPlaylistName = ''"
+                  class="queue-btn">
+            Cancelar
+          </button>
+          <button @click="createNewPlaylist"
+                  :disabled="!newPlaylistName.trim()"
+                  class="play-btn"
+                  :style="{ opacity: newPlaylistName.trim() ? 1 : 0.5 }">
+            Crear
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Spotify-style notification -->
+    <div ref="notification" class="spotify-notification">
+      {{ notificationMessage }}
+    </div>
   </div>
 
 <script>
@@ -783,6 +1673,7 @@ new Vue({
   data: {
     // Navigation
     currentPage: 'home',
+    showMobileMenu: false,
 
     // Original data properties
     urlOrId: '',
@@ -802,14 +1693,55 @@ new Vue({
     searchQuery: '',
     searching: false,
     searchResults: [],
+    searchResultsPerPage: 10,
+    currentSearchPage: 0,
 
     // Liked songs
-    likedSongs: JSON.parse(localStorage.getItem('likedSongs') || '[]')
+    likedSongs: JSON.parse(localStorage.getItem('likedSongs') || '[]'),
+
+    // Playlists system
+    playlists: JSON.parse(localStorage.getItem('userPlaylists') || '[]'),
+    currentPlaylist: null,
+    playlistPlayer: {
+      currentIndex: 0,
+      isPlaying: false,
+      audio: null,
+      currentTime: 0,
+      duration: 0,
+      volume: 0.8,
+      isMuted: false
+    },
+    showCreatePlaylist: false,
+    newPlaylistName: '',
+
+    // Track readiness cache
+    readinessCache: new Map(),
+
+    // Notification message
+    notificationMessage: ''
   },
 
   computed: {
     audioSrc() {
       return this.state.current ? `/stream/${this.state.current.id}` : '';
+    },
+
+    paginatedSearchResults() {
+      const start = this.currentSearchPage * this.searchResultsPerPage;
+      const end = start + this.searchResultsPerPage;
+      return this.searchResults.slice(start, end);
+    },
+
+    totalSearchPages() {
+      return Math.ceil(this.searchResults.length / this.searchResultsPerPage);
+    },
+
+    hasNextPage() {
+      return this.currentSearchPage < this.totalSearchPages - 1;
+    },
+
+    hasPrevPage() {
+      return this.currentSearchPage > 0;
     }
   },
 
@@ -817,6 +1749,26 @@ new Vue({
     // Navigation
     setCurrentPage(page) {
       this.currentPage = page;
+    },
+
+    // Mobile menu methods
+    toggleMobileMenu() {
+      this.showMobileMenu = !this.showMobileMenu;
+    },
+
+    closeMobileMenu() {
+      this.showMobileMenu = false;
+    },
+
+    setCurrentPageMobile(page) {
+      this.currentPage = page;
+      this.showMobileMenu = false; // Close menu after selection
+    },
+
+    setCurrentPlaylistMobile(playlist) {
+      this.currentPlaylist = playlist;
+      this.currentPage = 'playlist';
+      this.showMobileMenu = false; // Close menu after selection
     },
 
     // Utility methods
@@ -827,6 +1779,27 @@ new Vue({
     mmss(s) {
       s = Math.max(0, Math.floor(s || 0));
       return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+    },
+
+    // Notification methods
+    showNotification(message) {
+      this.notificationMessage = message;
+
+      // Show notification
+      const notification = this.$refs.notification;
+      notification.classList.add('show');
+
+      // Hide automatically after 3 seconds
+      setTimeout(() => {
+        notification.classList.add('hide');
+        notification.classList.remove('show');
+
+        // Reset after animation completes
+        setTimeout(() => {
+          notification.classList.remove('hide');
+          this.notificationMessage = '';
+        }, 300);
+      }, 3000);
     },
 
     // WebSocket methods
@@ -891,7 +1864,20 @@ new Vue({
     refreshQueue() {
       fetch('/api/queue').then(r=>r.json()).then(q=>{
         this.queue = q || [];
-        this.markQueueReadiness();
+        // Only check readiness if queue has changed or every few cycles
+        if (!this._lastQueueCheck || Date.now() - this._lastQueueCheck > 15000) {
+          this.markQueueReadiness();
+          this._lastQueueCheck = Date.now();
+        } else {
+          // Apply cached readiness status without making HTTP requests
+          this.queue.forEach(t => {
+            const cached = this.readinessCache.get(t.id);
+            if (cached && cached.ready) {
+              t._ready = true;
+            }
+          });
+          this.$forceUpdate();
+        }
       }).catch(()=>{});
       this.wsSend('state:get', {});
     },
@@ -905,7 +1891,13 @@ new Vue({
       }
       if (audio.src !== location.origin + this.audioSrc) {
         audio.src = this.audioSrc;
+        // Apply volume when new audio loads
+        setTimeout(() => this.applyVolume(), 100);
       }
+
+      // Ensure volume is always applied
+      this.applyVolume();
+
       const drift = Math.abs((audio.currentTime || 0) - (this.state.position || 0));
       if (drift > 0.5) audio.currentTime = this.state.position || 0;
       if (this.state.playing && audio.paused) {
@@ -919,8 +1911,13 @@ new Vue({
       this.wsSend('player:seek', { at });
     },
 
+    setVolume(value) {
+      this.volume = parseFloat(value);
+      this.applyVolume();
+    },
+
     applyVolume() {
-      if (this.volume <= 0) this.volume = 0.1;
+      if (this.volume <= 0) this.volume = 0.01;
       document.getElementById('audio').volume = this.volume;
       localStorage.setItem('vol', String(this.volume));
       if (this.volume > 0 && this.muted) this.muted = false;
@@ -947,15 +1944,38 @@ new Vue({
     },
 
     async markQueueReadiness() {
+      const now = Date.now();
+      const CACHE_DURATION = 30000; // 30 seconds cache
+
       const tasks = this.queue.map(async t => {
+        // Check cache first
+        const cached = this.readinessCache.get(t.id);
+        if (cached && cached.ready && (now - cached.timestamp) < CACHE_DURATION) {
+          t._ready = true;
+          return t;
+        }
+
+        // Only check if not in cache or cache expired or was not ready
         try {
           const r = await fetch(`/stream/${t.id}`, { headers: { Range: 'bytes=0-0' } });
-          t._ready = (r.status === 206 || r.status === 200);
+          const ready = (r.status === 206 || r.status === 200);
+          t._ready = ready;
+
+          // Cache the result
+          this.readinessCache.set(t.id, { ready, timestamp: now });
+
+          // If ready, cache for longer (since files don't disappear)
+          if (ready) {
+            this.readinessCache.set(t.id, { ready: true, timestamp: now + CACHE_DURATION * 10 });
+          }
         } catch {
           t._ready = false;
+          // Cache negative result for shorter time
+          this.readinessCache.set(t.id, { ready: false, timestamp: now });
         }
         return t;
       });
+
       await Promise.allSettled(tasks);
       this.$forceUpdate();
     },
@@ -964,10 +1984,17 @@ new Vue({
     async searchMusic() {
       if (!this.searchQuery.trim()) return;
       this.searching = true;
+      this.currentSearchPage = 0; // Reset to first page
       try {
-        const response = await fetch(`/api/search?q=${encodeURIComponent(this.searchQuery)}&maxResults=10`);
+        const response = await fetch(`/api/search?q=${encodeURIComponent(this.searchQuery)}&maxResults=30`);
         const data = await response.json();
         this.searchResults = data.items || [];
+
+        // Initialize reactive properties for dropdowns
+        this.searchResults.forEach(song => {
+          this.$set(song, '_showPlaylists', false);
+        });
+
         this.setCurrentPage('search');
       } catch(e) {
         alert('Error buscando: ' + e.message);
@@ -980,6 +2007,19 @@ new Vue({
     clearSearch() {
       this.searchResults = [];
       this.searchQuery = '';
+      this.currentSearchPage = 0;
+    },
+
+    nextSearchPage() {
+      if (this.hasNextPage) {
+        this.currentSearchPage++;
+      }
+    },
+
+    prevSearchPage() {
+      if (this.hasPrevPage) {
+        this.currentSearchPage--;
+      }
     },
 
     async playNow(videoId) {
@@ -1041,8 +2081,13 @@ new Vue({
       const date = new Date(timestamp);
       const now = new Date();
       const diffTime = Math.abs(now - date);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+      const diffMinutes = Math.floor(diffTime / (1000 * 60));
 
+      if (diffMinutes < 1) return 'Hace unos segundos';
+      if (diffMinutes < 60) return `Hace ${diffMinutes} minutos`;
+      if (diffHours < 24) return `Hace ${diffHours} horas`;
       if (diffDays === 1) return 'Hace 1 día';
       if (diffDays < 30) return `Hace ${diffDays} días`;
       if (diffDays < 365) {
@@ -1074,6 +2119,509 @@ new Vue({
     removeLikedSong(songId) {
       this.likedSongs = this.likedSongs.filter(song => song.id !== songId);
       localStorage.setItem('likedSongs', JSON.stringify(this.likedSongs));
+    },
+
+    // ---- Playlist methods ----
+    createNewPlaylist() {
+      if (!this.newPlaylistName.trim()) return;
+
+      const playlist = {
+        id: Date.now().toString(),
+        name: this.newPlaylistName.trim(),
+        songs: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+
+      this.playlists.push(playlist);
+      this.savePlaylists();
+      this.newPlaylistName = '';
+      this.showCreatePlaylist = false;
+    },
+
+    deletePlaylist(playlistId) {
+      if (confirm('¿Eliminar esta playlist?')) {
+        this.playlists = this.playlists.filter(p => p.id !== playlistId);
+        this.savePlaylists();
+        if (this.currentPlaylist && this.currentPlaylist.id === playlistId) {
+          this.currentPlaylist = null;
+        }
+      }
+    },
+
+    async addToPlaylist(playlistId, songId, songTitle) {
+      const playlist = this.playlists.find(p => p.id === playlistId);
+      if (!playlist) {
+        console.error('Playlist not found:', playlistId);
+        return;
+      }
+
+      // Check if song already exists
+      if (playlist.songs.some(s => s.id === songId)) {
+        this.showNotification('La canción ya está en esta playlist');
+        return;
+      }
+
+      const newSong = {
+        id: songId,
+        title: songTitle,
+        thumbnail: this.thumb(songId),
+        addedAt: Date.now()
+      };
+
+      playlist.songs.push(newSong);
+      playlist.updatedAt = Date.now();
+
+      this.savePlaylists();
+      this.showNotification(`Agregado a "${playlist.name}"`);
+
+      // Automatically download the song for playlist playback
+      try {
+        console.log(`Descargando canción para playlist: ${songTitle}`);
+
+        // Immediately set status to downloading with 0% progress
+        this.readinessCache.set(songId, {
+          ready: false,
+          status: 'downloading',
+          progress: 0,
+          file_size: 0
+        });
+
+        console.log('🟠 Set initial downloading status for:', songId);
+
+        // Force UI update to show downloading status
+        this.$forceUpdate();
+
+        // Start the download
+        const downloadPromise = fetch('/api/download', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            urlOrId: songId,
+            enqueue: false
+          })
+        });
+
+        // Start polling for progress
+        this.pollDownloadProgress(songId);
+
+        // Wait for download to complete
+        await downloadPromise;
+        console.log(`Descarga completada para: ${songTitle}`);
+
+      } catch (error) {
+        console.error('Error downloading song for playlist:', error);
+        // Set error status
+        this.readinessCache.set(songId, {
+          ready: false,
+          status: 'error',
+          progress: 0,
+          file_size: 0
+        });
+        this.$forceUpdate();
+      }
+
+      // Force update to ensure UI reflects changes
+      this.$forceUpdate();
+    },
+
+    removeFromPlaylist(playlistId, songId) {
+      const playlist = this.playlists.find(p => p.id === playlistId);
+      if (!playlist) return;
+
+      playlist.songs = playlist.songs.filter(s => s.id !== songId);
+      playlist.updatedAt = Date.now();
+      this.savePlaylists();
+    },
+
+    savePlaylists() {
+      localStorage.setItem('userPlaylists', JSON.stringify(this.playlists));
+    },
+
+    openPlaylist(playlist) {
+      this.currentPlaylist = playlist;
+      this.setCurrentPage('playlist');
+    },
+
+    // ---- Playlist Player methods ----
+    playPlaylist(playlist, startIndex = 0) {
+      if (!playlist.songs.length) return;
+
+      this.currentPlaylist = playlist;
+      this.playlistPlayer.currentIndex = startIndex;
+      this.playPlaylistSong();
+    },
+
+    async playPlaylistSong() {
+      if (!this.currentPlaylist || !this.currentPlaylist.songs.length) return;
+
+      const song = this.currentPlaylist.songs[this.playlistPlayer.currentIndex];
+      if (!song) return;
+
+      // Check if song is ready first
+      const readyStatus = await this.checkPlaylistSongReady(song.id);
+      if (!readyStatus.ready) {
+        console.log('Song not ready for playlist playback:', song.title);
+        // Force update UI to show downloading status
+        this.readinessCache.set(song.id, readyStatus);
+        this.$forceUpdate();
+        return;
+      }
+
+      // Update cache to show it's ready
+      this.readinessCache.set(song.id, readyStatus);
+
+      // Stop any current playlist audio
+      if (this.playlistPlayer.audio) {
+        this.playlistPlayer.audio.pause();
+        this.playlistPlayer.audio = null;
+      }
+
+      // Create new audio element for playlist
+      const audio = new Audio(`/stream/${song.id}`);
+      this.playlistPlayer.audio = audio;
+
+      // Apply volume immediately
+      this.applyPlaylistVolume();
+
+      audio.addEventListener('loadedmetadata', () => {
+        this.playlistPlayer.duration = audio.duration;
+        // Ensure volume is applied when metadata loads
+        this.applyPlaylistVolume();
+      });
+
+      audio.addEventListener('timeupdate', () => {
+        this.playlistPlayer.currentTime = audio.currentTime;
+      });
+
+      audio.addEventListener('ended', () => {
+        this.nextPlaylistSong();
+      });
+
+      audio.addEventListener('error', (e) => {
+        console.error('Playlist audio error:', e);
+        this.playlistPlayer.isPlaying = false;
+      });
+
+      audio.play().then(() => {
+        this.playlistPlayer.isPlaying = true;
+      }).catch(error => {
+        console.error('Error playing playlist song:', error);
+        this.playlistPlayer.isPlaying = false;
+      });
+    },
+
+    pausePlaylist() {
+      if (this.playlistPlayer.audio) {
+        this.playlistPlayer.audio.pause();
+        this.playlistPlayer.isPlaying = false;
+      }
+    },
+
+    resumePlaylist() {
+      if (this.playlistPlayer.audio) {
+        this.playlistPlayer.audio.play();
+        this.playlistPlayer.isPlaying = true;
+      }
+    },
+
+    nextPlaylistSong() {
+      if (!this.currentPlaylist) return;
+
+      if (this.playlistPlayer.currentIndex < this.currentPlaylist.songs.length - 1) {
+        this.playlistPlayer.currentIndex++;
+        this.playPlaylistSong();
+      } else {
+        // End of playlist
+        this.playlistPlayer.isPlaying = false;
+      }
+    },
+
+    prevPlaylistSong() {
+      if (!this.currentPlaylist) return;
+
+      if (this.playlistPlayer.currentIndex > 0) {
+        this.playlistPlayer.currentIndex--;
+        this.playPlaylistSong();
+      }
+    },
+
+    getCurrentPlaylistSong() {
+      if (!this.currentPlaylist || !this.currentPlaylist.songs.length) return null;
+      return this.currentPlaylist.songs[this.playlistPlayer.currentIndex];
+    },
+
+    // ---- Playlist volume control ----
+    setPlaylistVolume(value) {
+      this.playlistPlayer.volume = parseFloat(value);
+      this.playlistPlayer.isMuted = false;
+      this.applyPlaylistVolume();
+      this.savePlaylistVolume();
+    },
+
+    togglePlaylistMute() {
+      this.playlistPlayer.isMuted = !this.playlistPlayer.isMuted;
+      this.applyPlaylistVolume();
+      this.savePlaylistVolume();
+    },
+
+    applyPlaylistVolume() {
+      if (this.playlistPlayer.audio) {
+        this.playlistPlayer.audio.volume = this.playlistPlayer.isMuted ? 0 : this.playlistPlayer.volume;
+      }
+    },
+
+    savePlaylistVolume() {
+      localStorage.setItem('playlistVolume', this.playlistPlayer.volume.toString());
+      localStorage.setItem('playlistMuted', this.playlistPlayer.isMuted.toString());
+    },
+
+    loadPlaylistVolume() {
+      const savedVolume = localStorage.getItem('playlistVolume');
+      const savedMuted = localStorage.getItem('playlistMuted');
+
+      if (savedVolume) {
+        this.playlistPlayer.volume = parseFloat(savedVolume);
+      }
+      if (savedMuted) {
+        this.playlistPlayer.isMuted = savedMuted === 'true';
+      }
+    },
+
+    // ---- Playlist seek and shuffle functions ----
+    seekPlaylistAudio(event) {
+      if (!this.playlistPlayer.audio || !this.playlistPlayer.duration) return;
+
+      const progressBar = event.currentTarget;
+      const rect = progressBar.getBoundingClientRect();
+      const clickX = event.clientX - rect.left;
+      const percentage = clickX / rect.width;
+      const newTime = this.playlistPlayer.duration * percentage;
+
+      this.playlistPlayer.audio.currentTime = newTime;
+    },
+
+    shufflePlayPlaylist(playlist) {
+      if (!playlist.songs.length) return;
+
+      // Create a shuffled copy of the songs array
+      const shuffledSongs = [...playlist.songs];
+      for (let i = shuffledSongs.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledSongs[i], shuffledSongs[j]] = [shuffledSongs[j], shuffledSongs[i]];
+      }
+
+      // Create a temporary playlist with shuffled songs
+      const shuffledPlaylist = { ...playlist, songs: shuffledSongs };
+      this.currentPlaylist = shuffledPlaylist;
+      this.playlistPlayer.currentIndex = 0;
+      this.playPlaylistSong();
+
+      this.showNotification(`Reproduciendo "${playlist.name}" en modo aleatorio`);
+    },
+
+    // ---- Check playlist song readiness ----
+    async checkPlaylistSongReady(songId) {
+      try {
+        const response = await fetch(`/ready/${songId}`);
+        const data = await response.json();
+        return {
+          ready: response.ok && data.ready,
+          status: data.status || 'unknown',
+          progress: data.progress || 0,
+          file_size: data.file_size || 0
+        };
+      } catch (error) {
+        console.error('Error checking playlist song readiness:', error);
+        return {
+          ready: false,
+          status: 'error',
+          progress: 0,
+          file_size: 0
+        };
+      }
+    },
+
+    getPlaylistSongStatus(songId) {
+      // Check cache first
+      if (this.readinessCache.has(songId)) {
+        return this.readinessCache.get(songId);
+      }
+
+      // Check if we're already checking this song to avoid duplicates
+      if (this._checking && this._checking.has(songId)) {
+        return { status: 'checking', progress: 0 };
+      }
+
+      // Initialize checking set if it doesn't exist
+      if (!this._checking) {
+        this._checking = new Set();
+      }
+
+      // Mark as being checked
+      this._checking.add(songId);
+
+      // Check readiness and cache result
+      this.checkPlaylistSongReady(songId).then(result => {
+        this.readinessCache.set(songId, result);
+        this._checking.delete(songId);
+        // Use nextTick instead of forceUpdate to avoid infinite loops
+        this.$nextTick(() => {
+          this.$forceUpdate();
+        });
+      }).catch(error => {
+        console.error('Error checking song readiness:', error);
+        this._checking.delete(songId);
+        // Default to error state
+        this.readinessCache.set(songId, { ready: false, status: 'error', progress: 0 });
+      });
+
+      return { status: 'checking', progress: 0 };
+    },
+
+    getPlaylistSongStatusText(songId) {
+      const status = this.getPlaylistSongStatus(songId);
+
+
+      if (typeof status === 'boolean') {
+        // Legacy support for old cache entries
+        return status ? '● Listo' : '● Descargando';
+      }
+
+      switch (status.status) {
+        case 'completed':
+          return '● Listo';
+        case 'downloading':
+          return `● Descargando ${status.progress}%`;
+        case 'not_found':
+          return '● No descargado';
+        case 'checking':
+          return '● Verificando';
+        case 'error':
+          return '● Error';
+        default:
+          return '● Verificando';
+      }
+    },
+
+    getPlaylistSongStatusColor(songId) {
+      const status = this.getPlaylistSongStatus(songId);
+
+      if (typeof status === 'boolean') {
+        // Legacy support for old cache entries
+        return status ? 'var(--spotify-green)' : '#ffa500';
+      }
+
+      switch (status.status) {
+        case 'completed':
+          return 'var(--spotify-green)';
+        case 'downloading':
+          return '#ffa500';
+        case 'not_found':
+          return '#ff6b6b';
+        case 'checking':
+          return 'var(--spotify-text-subdued)';
+        case 'error':
+          return '#ff3333';
+        default:
+          return 'var(--spotify-text-subdued)';
+      }
+    },
+
+    isPlaylistSongReady(songId) {
+      const status = this.getPlaylistSongStatus(songId);
+
+      if (typeof status === 'boolean') {
+        // Legacy support for old cache entries
+        return status;
+      }
+
+      return status.status === 'completed';
+    },
+
+    async pollDownloadProgress(songId) {
+      // Check if song is already completed
+      const existingStatus = this.readinessCache.get(songId);
+      if (existingStatus && existingStatus.status === 'completed') {
+        return; // Don't poll completed songs
+      }
+
+      const maxAttempts = 60; // Max 1 minute of polling
+      let attempts = 0;
+
+      const poll = async () => {
+        if (attempts >= maxAttempts) {
+          return;
+        }
+
+        attempts++;
+
+        try {
+          const response = await fetch(`/ready/${songId}`);
+          const data = await response.json();
+
+          // Update cache with current status
+          this.readinessCache.set(songId, {
+            ready: response.ok && data.ready,
+            status: data.status || 'checking',
+            progress: data.progress || 0,
+            file_size: data.file_size || 0
+          });
+
+          // Force UI update
+          this.$forceUpdate();
+
+          // If download is complete, stop polling
+          if (response.ok && data.ready && data.status === 'completed') {
+            return;
+          }
+
+          // If still downloading or checking, continue polling
+          if (data.status === 'downloading' || data.status === 'checking') {
+            setTimeout(poll, 1000); // Poll every second
+          }
+
+        } catch (error) {
+          console.error('Error polling download progress:', error);
+          // Set error status and stop polling
+          this.readinessCache.set(songId, {
+            ready: false,
+            status: 'error',
+            progress: 0,
+            file_size: 0
+          });
+          this.$forceUpdate();
+        }
+      };
+
+      // Start polling after a short delay
+      setTimeout(poll, 1000);
+    },
+
+    // ---- Dropdown management ----
+    togglePlaylistDropdown(song) {
+      // Cerrar todos los otros dropdowns primero
+      this.closeAllDropdowns();
+
+      // Asegurar que la propiedad reactiva existe
+      if (!song.hasOwnProperty('_showPlaylists')) {
+        this.$set(song, '_showPlaylists', false);
+      }
+
+      // Toggle el dropdown actual
+      song._showPlaylists = !song._showPlaylists;
+    },
+
+    closeAllDropdowns() {
+      // Cerrar todos los dropdowns de resultados de búsqueda
+      this.searchResults.forEach(song => {
+        if (song._showPlaylists) {
+          song._showPlaylists = false;
+        }
+      });
+      this.$forceUpdate();
     }
   },
 
@@ -1082,17 +2630,30 @@ new Vue({
     if (!this.rate || this.rate < 0.5) this.rate = 1;
     if (this.volume <= 0) this.volume = 0.8;
 
+    // Load playlist volume settings
+    this.loadPlaylistVolume();
+
     // Setup audio element
     const audio = document.getElementById('audio');
-    audio.volume = this.volume;
-    audio.playbackRate = this.rate;
+
+    // Apply volume and rate from localStorage immediately
+    this.applyVolume();
+    this.applyRate();
+
     audio.addEventListener('canplay', () => {
+      // Ensure volume is applied when audio is ready
+      this.applyVolume();
       if (this.state.playing) this.enableAudio();
+    });
+
+    // Also apply volume when audio loads
+    audio.addEventListener('loadeddata', () => {
+      this.applyVolume();
     });
 
     // Connect WebSocket and start polling
     this.connectWS();
-    this.pollTimer = setInterval(this.refreshQueue, 4000);
+    this.pollTimer = setInterval(this.refreshQueue, 8000); // Reduced frequency from 4s to 8s
 
     // Initial refreshes
     this.refreshQueue();

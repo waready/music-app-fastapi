@@ -1424,6 +1424,14 @@
 
               <!-- Playlist Mini Player positioned below song count -->
               <div v-if="playlistPlayer.audio && getCurrentPlaylistSong()" class="playlist-mini-player-inline">
+                <!-- Audio Spectrum Visualizer -->
+                <div style="margin-bottom: 1rem; background: var(--spotify-gray); border-radius: 0.5rem; padding: 1rem;">
+                  <canvas ref="playlistSpectrumCanvas"
+                          width="800"
+                          height="120"
+                          style="width: 100%; height: 120px; display: block; border-radius: 0.25rem;"></canvas>
+                </div>
+
                 <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
                   <img :src="getCurrentPlaylistSong().thumbnail"
                        :alt="getCurrentPlaylistSong().title"
@@ -1709,13 +1717,22 @@ new Vue({
       currentTime: 0,
       duration: 0,
       volume: 0.8,
-      isMuted: false
+      isMuted: false,
+      // Audio visualizer
+      audioContext: null,
+      analyser: null,
+      dataArray: null,
+      animationId: null
     },
     showCreatePlaylist: false,
     newPlaylistName: '',
 
     // Track readiness cache
     readinessCache: new Map(),
+
+    // Track songs being downloaded for playlists
+    downloadingPlaylistSongs: {},
+    checkDownloadInterval: null,
 
     // Notification message
     notificationMessage: ''
@@ -2192,8 +2209,11 @@ new Vue({
         // Force UI update to show downloading status
         this.$forceUpdate();
 
+        // Start polling for progress immediately
+        this.pollDownloadProgress(songId);
+
         // Start the download
-        const downloadPromise = fetch('/api/download', {
+        const response = await fetch('/api/download', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -2204,12 +2224,20 @@ new Vue({
           })
         });
 
-        // Start polling for progress
-        this.pollDownloadProgress(songId);
+        if (response.ok) {
+          console.log(`Descarga completada para: ${songTitle}`);
 
-        // Wait for download to complete
-        await downloadPromise;
-        console.log(`Descarga completada para: ${songTitle}`);
+          // Update cache immediately after successful download
+          this.readinessCache.set(songId, {
+            ready: true,
+            status: 'completed',
+            progress: 100,
+            file_size: 0
+          });
+
+          // Force UI update
+          this.$forceUpdate();
+        }
 
       } catch (error) {
         console.error('Error downloading song for playlist:', error);
@@ -2222,9 +2250,6 @@ new Vue({
         });
         this.$forceUpdate();
       }
-
-      // Force update to ensure UI reflects changes
-      this.$forceUpdate();
     },
 
     removeFromPlaylist(playlistId, songId) {
@@ -2273,10 +2298,19 @@ new Vue({
       // Update cache to show it's ready
       this.readinessCache.set(song.id, readyStatus);
 
-      // Stop any current playlist audio
+      // Stop any current playlist audio and visualizer
+      this.stopPlaylistVisualizer();
+
       if (this.playlistPlayer.audio) {
         this.playlistPlayer.audio.pause();
         this.playlistPlayer.audio = null;
+      }
+
+      // Reset audio context to allow new source connection
+      if (this.playlistPlayer.audioContext) {
+        this.playlistPlayer.audioContext.close();
+        this.playlistPlayer.audioContext = null;
+        this.playlistPlayer.analyser = null;
       }
 
       // Create new audio element for playlist
@@ -2307,16 +2341,104 @@ new Vue({
 
       audio.play().then(() => {
         this.playlistPlayer.isPlaying = true;
+        // Initialize audio visualizer
+        this.initPlaylistVisualizer();
       }).catch(error => {
         console.error('Error playing playlist song:', error);
         this.playlistPlayer.isPlaying = false;
       });
     },
 
+    // ---- Audio Visualizer methods ----
+    initPlaylistVisualizer() {
+      if (!this.playlistPlayer.audio) return;
+
+      try {
+        // Create AudioContext and analyser only once
+        if (!this.playlistPlayer.audioContext) {
+          this.playlistPlayer.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          this.playlistPlayer.analyser = this.playlistPlayer.audioContext.createAnalyser();
+          this.playlistPlayer.analyser.fftSize = 128; // 64 bars
+          this.playlistPlayer.analyser.smoothingTimeConstant = 0.8;
+
+          // Create source and connect to analyser
+          const source = this.playlistPlayer.audioContext.createMediaElementSource(this.playlistPlayer.audio);
+          source.connect(this.playlistPlayer.analyser);
+          this.playlistPlayer.analyser.connect(this.playlistPlayer.audioContext.destination);
+
+          const bufferLength = this.playlistPlayer.analyser.frequencyBinCount;
+          this.playlistPlayer.dataArray = new Uint8Array(bufferLength);
+        }
+
+        // Resume AudioContext if suspended (browser autoplay policy)
+        if (this.playlistPlayer.audioContext.state === 'suspended') {
+          this.playlistPlayer.audioContext.resume();
+        }
+
+        // Start visualization
+        this.drawPlaylistSpectrum();
+      } catch (error) {
+        console.error('Error initializing visualizer:', error);
+      }
+    },
+
+    drawPlaylistSpectrum() {
+      if (!this.$refs.playlistSpectrumCanvas || !this.playlistPlayer.analyser) return;
+
+      const canvas = this.$refs.playlistSpectrumCanvas;
+      const canvasCtx = canvas.getContext('2d');
+      const analyser = this.playlistPlayer.analyser;
+      const dataArray = this.playlistPlayer.dataArray;
+
+      const draw = () => {
+        this.playlistPlayer.animationId = requestAnimationFrame(draw);
+
+        analyser.getByteFrequencyData(dataArray);
+
+        // Clear canvas with dark background
+        canvasCtx.fillStyle = '#121212';
+        canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const barWidth = (canvas.width / dataArray.length) * 0.8;
+        let barHeight;
+        let x = 0;
+
+        for (let i = 0; i < dataArray.length; i++) {
+          barHeight = (dataArray[i] / 255) * canvas.height * 0.9;
+
+          // Create RGB gradient - colors change based on position
+          const hue = (i / dataArray.length) * 360; // 0-360 for full color spectrum
+          const gradient = canvasCtx.createLinearGradient(0, canvas.height - barHeight, 0, canvas.height);
+
+          // Top color: bright vibrant
+          gradient.addColorStop(0, `hsl(${hue}, 100%, 60%)`);
+          // Middle: saturated
+          gradient.addColorStop(0.5, `hsl(${hue}, 90%, 50%)`);
+          // Bottom: deep rich
+          gradient.addColorStop(1, `hsl(${hue}, 80%, 40%)`);
+
+          canvasCtx.fillStyle = gradient;
+          canvasCtx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+
+          x += barWidth + (canvas.width / dataArray.length) * 0.2;
+        }
+      };
+
+      draw();
+    },
+
+    stopPlaylistVisualizer() {
+      if (this.playlistPlayer.animationId) {
+        cancelAnimationFrame(this.playlistPlayer.animationId);
+        this.playlistPlayer.animationId = null;
+      }
+    },
+
     pausePlaylist() {
       if (this.playlistPlayer.audio) {
         this.playlistPlayer.audio.pause();
         this.playlistPlayer.isPlaying = false;
+        this.stopPlaylistVisualizer();
       }
     },
 
@@ -2324,6 +2446,7 @@ new Vue({
       if (this.playlistPlayer.audio) {
         this.playlistPlayer.audio.play();
         this.playlistPlayer.isPlaying = true;
+        this.drawPlaylistSpectrum();
       }
     },
 
@@ -2487,22 +2610,22 @@ new Vue({
 
       if (typeof status === 'boolean') {
         // Legacy support for old cache entries
-        return status ? '● Listo' : '● Descargando';
+        return status ? '● Listo' : '● Descargando...';
       }
 
       switch (status.status) {
         case 'completed':
           return '● Listo';
         case 'downloading':
-          return `● Descargando ${status.progress}%`;
+          return '● Descargando...';
         case 'not_found':
-          return '● No descargado';
+          return '● Descargando...';
         case 'checking':
-          return '● Verificando';
+          return '● Descargando...';
         case 'error':
           return '● Error';
         default:
-          return '● Verificando';
+          return '● Descargando...';
       }
     },
 
@@ -2548,11 +2671,12 @@ new Vue({
         return; // Don't poll completed songs
       }
 
-      const maxAttempts = 60; // Max 1 minute of polling
+      const maxAttempts = 120; // Max 2 minutes of polling
       let attempts = 0;
 
       const poll = async () => {
         if (attempts >= maxAttempts) {
+          console.log(`Polling timeout for ${songId}`);
           return;
         }
 
@@ -2575,29 +2699,35 @@ new Vue({
 
           // If download is complete, stop polling
           if (response.ok && data.ready && data.status === 'completed') {
+            console.log(`✅ Download completed for ${songId}`);
             return;
           }
 
           // If still downloading or checking, continue polling
-          if (data.status === 'downloading' || data.status === 'checking') {
+          if (data.status === 'downloading' || data.status === 'checking' || data.status === 'not_found') {
             setTimeout(poll, 1000); // Poll every second
           }
 
         } catch (error) {
           console.error('Error polling download progress:', error);
-          // Set error status and stop polling
-          this.readinessCache.set(songId, {
-            ready: false,
-            status: 'error',
-            progress: 0,
-            file_size: 0
-          });
-          this.$forceUpdate();
+          // Don't immediately set error, retry a few times
+          if (attempts < 5) {
+            setTimeout(poll, 2000); // Retry after 2 seconds
+          } else {
+            // Set error status and stop polling
+            this.readinessCache.set(songId, {
+              ready: false,
+              status: 'error',
+              progress: 0,
+              file_size: 0
+            });
+            this.$forceUpdate();
+          }
         }
       };
 
-      // Start polling after a short delay
-      setTimeout(poll, 1000);
+      // Start polling immediately
+      poll();
     },
 
     // ---- Dropdown management ----

@@ -392,12 +392,13 @@ def check_ready(video_id: str):
                     progress = min(50, (temp_size // 1024) // 10)  # Progreso estimado
                 break
 
+        # Siempre devolver 200 para que el frontend pueda procesar el estado
         return JSONResponse({
             "ready": False,
             "id": video_id,
             "status": status,
             "progress": progress
-        }, status_code=404)
+        }, status_code=200)
 
 @app.get("/", response_class=HTMLResponse)
 def index():

@@ -793,7 +793,7 @@ async def api_update_track_metadata(payload: TrackMetadata):
             # Broadcast to all rooms that have this track
             for room_name in rooms_read().keys():
                 room = await get_or_create_room(room_name)
-                await room.broadcast_state()
+                await room_broadcast_state(room)
 
         return {"success": updated, "id": payload.id}
 
@@ -803,13 +803,28 @@ async def api_get_metadata(video_id: str):
     try:
         print(f"[YT-DLP] Extracting metadata for {video_id}")
 
-        # Configurar yt-dlp para solo extraer metadata
+        # Configurar yt-dlp para solo extraer metadata con anti-bot headers
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
             'extract_flat': False,
             'skip_download': True,
             'format': 'worst',  # No necesitamos formato de alta calidad
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Accept-Encoding': 'gzip,deflate',
+                'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+                'Keep-Alive': '300',
+                'Connection': 'keep-alive',
+            },
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                    'player_skip': ['webpage'],
+                }
+            }
         }
 
         video_url = f"https://www.youtube.com/watch?v={video_id}"
@@ -836,14 +851,32 @@ async def api_get_metadata(video_id: str):
 
     except Exception as e:
         print(f"[YT-DLP] Error extracting metadata for {video_id}: {e}")
-        # Fallback en caso de error
+
+        # Intentar obtener metadata básica de la base de datos si ya existe
+        try:
+            async with _db_lock:
+                db = db_read()
+                existing_track = db.get(video_id)
+                if existing_track and not existing_track.get('title', '').startswith('YouTube Video'):
+                    print(f"[YT-DLP] Using existing metadata from database for {video_id}")
+                    return {
+                        "id": video_id,
+                        "title": existing_track.get('title', f'YouTube Video {video_id}'),
+                        "duration": existing_track.get('seconds', 180),
+                        "seconds": existing_track.get('seconds', 180),
+                        "source": "database_fallback"
+                    }
+        except Exception as db_error:
+            print(f"[YT-DLP] Database fallback failed: {db_error}")
+
+        # Último fallback con placeholder
         return {
             "id": video_id,
             "title": f"YouTube Video {video_id}",
             "duration": 180,
             "seconds": 180,
             "error": str(e),
-            "source": "fallback"
+            "source": "placeholder_fallback"
         }
 
 @app.get("/api/queue")

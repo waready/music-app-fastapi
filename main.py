@@ -1,17 +1,25 @@
 import os, json, asyncio, time, math
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Body
-from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse, FileResponse, RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from yt_dlp import YoutubeDL
+import bcrypt
 
+# Modo de streaming: "direct" (desde YouTube) o "download" (descargar MP3)
+STREAMING_MODE = os.getenv("STREAMING_MODE", "direct")
 MEDIA_DIR = "media"
 DB_FILE = "db.json"
-Q_FILE = "queue.json"
+ROOMS_FILE = "rooms.json"
+USERS_FILE = "users.json"
+SESSIONS_FILE = "sessions.json"
 
 os.makedirs(MEDIA_DIR, exist_ok=True)
 if not os.path.exists(DB_FILE): open(DB_FILE, "w").write("{}")
-if not os.path.exists(Q_FILE): open(Q_FILE, "w").write("[]")
+if not os.path.exists(ROOMS_FILE): open(ROOMS_FILE, "w").write("{}")
+if not os.path.exists(USERS_FILE): open(USERS_FILE, "w").write("{}")
+if not os.path.exists(SESSIONS_FILE): open(SESSIONS_FILE, "w").write("{}")
 
 def load_json(path, default):
     try:
@@ -25,14 +33,23 @@ def mmss(sec: float) -> str:
     s = max(0, int(sec))
     return f"{s//60}:{s%60:02d}"
 
-# ---- DB y Cola (bloqueo ligero) ----
+# ---- DB y Locks ----
 _db_lock = asyncio.Lock()
-_q_lock = asyncio.Lock()
+_rooms_lock = asyncio.Lock()
+_users_lock = asyncio.Lock()
+_sessions_lock = asyncio.Lock()
 
 def db_read() -> Dict[str, Any]: return load_json(DB_FILE, {})
 def db_write(db: Dict[str, Any]): save_json(DB_FILE, db)
-def q_read() -> List[str]: return load_json(Q_FILE, [])
-def q_write(q: List[str]): save_json(Q_FILE, q)
+
+def rooms_read() -> Dict[str, Any]: return load_json(ROOMS_FILE, {})
+def rooms_write(rooms: Dict[str, Any]): save_json(ROOMS_FILE, rooms)
+
+def users_read() -> Dict[str, Any]: return load_json(USERS_FILE, {})
+def users_write(users: Dict[str, Any]): save_json(USERS_FILE, users)
+
+def sessions_read() -> Dict[str, Any]: return load_json(SESSIONS_FILE, {})
+def sessions_write(sessions: Dict[str, Any]): save_json(SESSIONS_FILE, sessions)
 
 # ---- Búsqueda en YouTube ----
 def _search_youtube(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
@@ -85,12 +102,65 @@ async def search_youtube_async(query: str, max_results: int = 20) -> List[Dict[s
     """Ejecuta búsqueda en hilo para no bloquear el loop"""
     return await asyncio.to_thread(_search_youtube, query, max_results)
 
-# ---- Descarga / Registro con yt-dlp ----
+# ---- Streaming Directo / Descarga con yt-dlp ----
+def _get_yt_stream_info(url_or_id: str) -> Dict[str, Any]:
+    """Extrae metadata + URL de streaming directo SIN descargar (modo 'direct')"""
+    db = db_read()
+
+    # Si ya existe y la URL no expiró (< 5 horas), retornar
+    if url_or_id in db:
+        cached = db[url_or_id]
+        timestamp = cached.get("timestamp", 0)
+        # URLs de YouTube expiran en ~6 horas, refrescamos a las 5h
+        if time.time() - timestamp < 18000:  # 5 horas = 18000 seg
+            return cached
+
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "noplaylist": True,
+        "quiet": True,
+        "no_warnings": True,
+        # Opciones para mejorar estabilidad
+        "socket_timeout": 30,
+        "retries": 3,
+    }
+
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url_or_id, download=False)  # NO descarga
+
+            vid = info.get("id")
+            title = info.get("title")
+            duration = int(info.get("duration") or 0)
+
+            # URL directa del stream de audio (la magia está aquí)
+            stream_url = info.get("url")
+
+            rec = {
+                "id": vid,
+                "title": title,
+                "seconds": duration,
+                "stream_url": stream_url,
+                "timestamp": time.time(),
+                "thumbnail": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
+                "mode": "direct"
+            }
+
+            # Guardar en DB
+            db = db_read()
+            db[vid] = rec
+            db_write(db)
+            return rec
+    except Exception as e:
+        print(f"Error obteniendo stream info: {e}")
+        raise
+
 def _download_yt_to_mp3(url_or_id: str) -> Dict[str, Any]:
+    """Descarga MP3 a disco (modo 'download')"""
     # Si ya tenemos metadata + archivo, no descargamos
     db = db_read()
     if url_or_id in db:
-        fn = os.path.join(MEDIA_DIR, db[url_or_id]["filename"])
+        fn = os.path.join(MEDIA_DIR, db[url_or_id].get("filename", f"{url_or_id}.mp3"))
         if os.path.exists(fn): return db[url_or_id]
 
     ydl_opts = {
@@ -101,7 +171,6 @@ def _download_yt_to_mp3(url_or_id: str) -> Dict[str, Any]:
         "postprocessors": [
             {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}
         ],
-        # Usa ffmpeg del sistema (asegúrate de tenerlo en PATH)
     }
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url_or_id, download=True)
@@ -109,13 +178,62 @@ def _download_yt_to_mp3(url_or_id: str) -> Dict[str, Any]:
         title = info.get("title")
         duration = int(info.get("duration") or 0)
         filename = f"{vid}.mp3"
-        rec = {"id": vid, "title": title, "seconds": duration, "filename": filename}
+        rec = {
+            "id": vid,
+            "title": title,
+            "seconds": duration,
+            "filename": filename,
+            "mode": "download"
+        }
         db = db_read(); db[vid] = rec; db_write(db)
         return rec
 
 async def ensure_track(url_or_id: str) -> Dict[str, Any]:
-    # Ejecuta descarga en hilo para no bloquear el loop
-    return await asyncio.to_thread(_download_yt_to_mp3, url_or_id)
+    """Obtiene track según el modo configurado"""
+    db = db_read()
+
+    # Si ya existe en DB, retornar inmediatamente
+    if url_or_id in db:
+        cached = db[url_or_id]
+        # Para modo direct, verificar si URL expiró
+        if STREAMING_MODE == "direct":
+            timestamp = cached.get("timestamp", 0)
+            if time.time() - timestamp < 18000:  # 5 horas
+                return cached
+            # Si expiró, refrescar en background
+            asyncio.create_task(asyncio.to_thread(_get_yt_stream_info, url_or_id))
+        return cached
+
+    # Extraer video ID de URL si es necesario
+    video_id = url_or_id
+    if "youtube.com" in url_or_id or "youtu.be" in url_or_id:
+        # Extraer ID de la URL
+        if "v=" in url_or_id:
+            video_id = url_or_id.split("v=")[1].split("&")[0]
+        elif "youtu.be/" in url_or_id:
+            video_id = url_or_id.split("youtu.be/")[1].split("?")[0]
+
+    # Crear entrada temporal con estado "processing"
+    temp_record = {
+        "id": video_id,
+        "title": "Procesando...",
+        "seconds": 0,
+        "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
+        "mode": STREAMING_MODE,
+        "processing": True,  # Indica que está en proceso
+    }
+
+    # Guardar registro temporal en DB
+    db[video_id] = temp_record
+    db_write(db)
+
+    # Procesar en background sin bloquear
+    if STREAMING_MODE == "direct":
+        asyncio.create_task(asyncio.to_thread(_get_yt_stream_info, url_or_id))
+    else:
+        asyncio.create_task(asyncio.to_thread(_download_yt_to_mp3, url_or_id))
+
+    return temp_record
 
 # ---- Streaming con Range ----
 CHUNK = 1024 * 1024
@@ -147,141 +265,246 @@ class PlayerState:
         if self.started_at is None: return 0.0
         return max(0.0, time.time() - self.started_at)
 
-player = PlayerState()
-state_lock = asyncio.Lock()
+# ---- Room System ----
+class Room:
+    def __init__(self, room_id: str, name: str = "", created_by: Optional[str] = None,
+                 is_public: bool = True, password_hash: Optional[str] = None):
+        self.id = room_id
+        self.name = name or f"Room {room_id}"
+        self.created_by = created_by  # user_id del creador
+        self.is_public = is_public  # True = pública, False = privada
+        self.password_hash = password_hash  # Hash bcrypt de la contraseña (solo para privadas)
+        self.queue: List[str] = []
+        self.player = PlayerState()
+        self.connections: set[WebSocket] = set()
+        self.state_lock = asyncio.Lock()
+        self.queue_lock = asyncio.Lock()
 
-# ---- WebSocket Manager ----
-class WSManager:
-    def __init__(self): self.active: set[WebSocket] = set()
-    async def connect(self, ws: WebSocket):
-        await ws.accept(); self.active.add(ws)
-    def disconnect(self, ws: WebSocket):
-        self.active.discard(ws)
+    async def get_queue_detailed(self) -> List[Dict[str, Any]]:
+        async with self.queue_lock:
+            db = db_read()
+            return [db[i] for i in self.queue if i in db]
+
+    def public_state(self) -> Dict[str, Any]:
+        db = db_read()
+        cur = db.get(self.player.current_id) if self.player.current_id else None
+        pos = self.player.pos()
+        return {
+            "playing": self.player.playing(),
+            "position": pos,
+            "positionLabel": mmss(pos),
+            "duration": (cur or {}).get("seconds", 0),
+            "durationLabel": mmss((cur or {}).get("seconds", 0)),
+            "current": {"id": cur["id"], "title": cur["title"]} if cur else None,
+        }
+
     async def broadcast(self, payload: Dict[str, Any]):
         dead = []
-        for ws in list(self.active):
-            try: await ws.send_json(payload)
-            except Exception: dead.append(ws)
-        for ws in dead: self.disconnect(ws)
+        for ws in list(self.connections):
+            try:
+                await ws.send_json(payload)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.connections.discard(ws)
 
-ws_manager = WSManager()
+# Rooms activas en memoria
+rooms: Dict[str, Room] = {}
+rooms_lock = asyncio.Lock()
 
-# ---- Helpers de cola / reproducción ----
-async def up_next_ids() -> List[str]:
-    async with _q_lock: return q_read()
+async def get_or_create_room(room_id: str, user_id: Optional[str] = None,
+                             is_public: bool = True, password_hash: Optional[str] = None) -> Room:
+    """Obtiene o crea una room"""
+    async with rooms_lock:
+        if room_id not in rooms:
+            # Intentar cargar de disco
+            all_rooms = rooms_read()
+            if room_id in all_rooms:
+                room_data = all_rooms[room_id]
+                room = Room(
+                    room_id,
+                    room_data.get("name", ""),
+                    room_data.get("created_by"),
+                    room_data.get("is_public", True),
+                    room_data.get("password_hash")
+                )
+                room.queue = room_data.get("queue", [])
+            else:
+                # Crear nueva room
+                room = Room(room_id, created_by=user_id, is_public=is_public, password_hash=password_hash)
+                # Guardar en disco
+                all_rooms[room_id] = {
+                    "id": room_id,
+                    "name": room.name,
+                    "created_by": user_id,
+                    "is_public": is_public,
+                    "password_hash": password_hash,
+                    "queue": []
+                }
+                rooms_write(all_rooms)
+            rooms[room_id] = room
+        return rooms[room_id]
 
-async def up_next_detailed() -> List[Dict[str, Any]]:
-    ids = await up_next_ids()
-    db = db_read()
-    return [db[i] for i in ids if i in db]
+async def save_room_state(room: Room):
+    """Guarda el estado de una room a disco"""
+    async with _rooms_lock:
+        all_rooms = rooms_read()
+        all_rooms[room.id] = {
+            "id": room.id,
+            "name": room.name,
+            "created_by": room.created_by,
+            "is_public": room.is_public,
+            "password_hash": room.password_hash,
+            "queue": room.queue
+        }
+        rooms_write(all_rooms)
 
-async def enqueue_track(track_id: str):
-    async with _q_lock:
-        q = q_read(); q.append(track_id); q_write(q)
-    await broadcast_queue(); await maybe_autostart()
+# ---- Helpers de cola / reproducción por Room ----
+async def room_enqueue_track(room: Room, track_id: str):
+    async with room.queue_lock:
+        # Evitar duplicados en la cola
+        if track_id not in room.queue:
+            room.queue.append(track_id)
+    await save_room_state(room)
+    await room_broadcast_queue(room)
+    await room_maybe_autostart(room)
 
-async def shift_queue() -> Optional[str]:
-    async with _q_lock:
-        q = q_read()
-        if not q: return None
-        id_ = q.pop(0); q_write(q)
-    await broadcast_queue()
+async def room_shift_queue(room: Room) -> Optional[str]:
+    async with room.queue_lock:
+        if not room.queue: return None
+        id_ = room.queue.pop(0)
+    await save_room_state(room)
+    await room_broadcast_queue(room)
     return id_
 
-def public_state() -> Dict[str, Any]:
-    db = db_read()
-    cur = db.get(player.current_id) if player.current_id else None
-    pos = player.pos()
-    return {
-        "playing": player.playing(),
-        "position": pos,
-        "positionLabel": mmss(pos),
-        "duration": (cur or {}).get("seconds", 0),
-        "durationLabel": mmss((cur or {}).get("seconds", 0)),
-        "current": {"id": cur["id"], "title": cur["title"]} if cur else None,
-    }
-
-async def broadcast_state():
-    await ws_manager.broadcast({"type": "state", "data": {
-        **public_state(),
-        "queue": await up_next_detailed()
+async def room_broadcast_state(room: Room):
+    await room.broadcast({"type": "state", "data": {
+        **room.public_state(),
+        "queue": await room.get_queue_detailed()
     }})
 
-async def broadcast_queue():
-    await ws_manager.broadcast({"type": "queue:update", "data": await up_next_detailed()})
+async def room_broadcast_queue(room: Room):
+    await room.broadcast({"type": "queue:update", "data": await room.get_queue_detailed()})
 
-async def maybe_autostart():
-    async with state_lock:
-        if player.current_id: return
-        next_id = await shift_queue()
+async def room_maybe_autostart(room: Room):
+    async with room.state_lock:
+        print(f"[DEBUG] room_maybe_autostart for room {room.id}: current_id={room.player.current_id}, queue_len={len(room.queue)}")
+        if room.player.current_id:
+            print(f"[DEBUG] Already playing {room.player.current_id}, skipping autostart")
+            return
+        next_id = await room_shift_queue(room)
+        print(f"[DEBUG] Shifted next_id: {next_id}")
         if not next_id:
-            # nada que reproducir
-            await broadcast_state()
+            print(f"[DEBUG] No next track in queue, broadcasting empty state")
+            await room_broadcast_state(room)
             return
         db = db_read(); meta = db.get(next_id)
-        if not meta:  # si falta metadata, intenta siguiente
-            await maybe_autostart(); return
-        player.current_id = next_id
-        player.duration = float(meta.get("seconds") or 0)
-        player.paused = False
-        player.paused_at = 0.0
-        player.started_at = time.time()
-    await ws_manager.broadcast({"type":"player:next","data":{"current":{"id":meta["id"],"title":meta["title"]}}})
-    await broadcast_state()
+        if not meta:
+            print(f"[DEBUG] Track {next_id} not found in DB, recursing")
+            await room_maybe_autostart(room); return
+        print(f"[DEBUG] Starting track {next_id}: {meta.get('title')}")
+        room.player.current_id = next_id
+        room.player.duration = float(meta.get("seconds") or 0)
+        room.player.paused = False
+        room.player.paused_at = 0.0
+        room.player.started_at = time.time()
+        print(f"[DEBUG] Player state: current_id={room.player.current_id}, paused={room.player.paused}, playing={room.player.playing()}")
+    await room.broadcast({"type":"player:next","data":{"current":{"id":meta["id"],"title":meta["title"]}}})
+    await room_broadcast_state(room)
 
-async def cmd_play(at: Optional[float] = None):
-    async with state_lock:
-        if not player.current_id: 
-            await maybe_autostart(); return
-        if not player.paused: return
-        seek = player.paused_at if at is None else max(0.0, float(at))
-        player.started_at = time.time() - seek
-        player.paused = False
-    await broadcast_state()
+async def room_cmd_play(room: Room, at: Optional[float] = None):
+    async with room.state_lock:
+        if not room.player.current_id:
+            await room_maybe_autostart(room); return
+        if not room.player.paused: return
+        seek = room.player.paused_at if at is None else max(0.0, float(at))
+        room.player.started_at = time.time() - seek
+        room.player.paused = False
+    await room_broadcast_state(room)
 
-async def cmd_pause():
-    async with state_lock:
-        if not player.current_id or player.paused: return
-        player.paused_at = player.pos()
-        player.paused = True
-    await broadcast_state()
+async def room_cmd_pause(room: Room):
+    async with room.state_lock:
+        if not room.player.current_id or room.player.paused: return
+        room.player.paused_at = room.player.pos()
+        room.player.paused = True
+    await room_broadcast_state(room)
 
-async def cmd_seek(at: float):
-    async with state_lock:
-        if not player.current_id: return
-        at = max(0.0, min(float(at), player.duration or 0.0))
-        if player.paused: player.paused_at = at
-        else: player.started_at = time.time() - at
-    await broadcast_state()
+async def room_cmd_seek(room: Room, at: float):
+    async with room.state_lock:
+        if not room.player.current_id: return
+        at = max(0.0, min(float(at), room.player.duration or 0.0))
+        if room.player.paused: room.player.paused_at = at
+        else: room.player.started_at = time.time() - at
+    await room_broadcast_state(room)
 
-async def cmd_next():
-    # Detener actual y pasar al siguiente
-    async with state_lock:
-        player.current_id = None
-        player.duration = 0.0
-        player.started_at = None
-        player.paused = False
-        player.paused_at = 0.0
-    await maybe_autostart()
+async def room_cmd_next(room: Room):
+    async with room.state_lock:
+        room.player.current_id = None
+        room.player.duration = 0.0
+        room.player.started_at = None
+        room.player.paused = False
+        room.player.paused_at = 0.0
+    await room_maybe_autostart(room)
 
-# ---- Ticker: emite tiempo y avanza al terminar ----
+# ---- Ticker: emite tiempo y avanza al terminar (para todas las rooms) ----
 async def ticker():
     while True:
         await asyncio.sleep(1)
-        if not player.current_id or player.paused: 
-            continue
-        pos = player.pos()
-        await ws_manager.broadcast({"type":"player:tick","data":{"position":pos,"positionLabel":mmss(pos)}})
-        if player.duration and pos >= player.duration - 0.3:
-            await cmd_next()
+        for room_id, room in list(rooms.items()):
+            if not room.player.current_id or room.player.paused:
+                continue
+            pos = room.player.pos()
+            await room.broadcast({"type":"player:tick","data":{"position":pos,"positionLabel":mmss(pos)}})
+            if room.player.duration and pos >= room.player.duration - 0.3:
+                await room_cmd_next(room)
 
 app = FastAPI(title="Music Realtime FastAPI")
+
+# Configurar CORS para permitir acceso desde GitHub Pages u otros orígenes
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # En producción, cambiar a tu dominio de GitHub Pages
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+async def cleanup_old_sessions():
+    """Limpia sesiones antiguas cada hora"""
+    while True:
+        await asyncio.sleep(3600)  # 1 hora
+        try:
+            async with _sessions_lock:
+                sessions = sessions_read()
+                current_time = time.time()
+                # Eliminar sesiones mayores a 24 horas
+                old_tokens = [
+                    token for token, data in sessions.items()
+                    if current_time - data.get("created_at", 0) > 86400
+                ]
+                for token in old_tokens:
+                    del sessions[token]
+                if old_tokens:
+                    sessions_write(sessions)
+                    print(f"[CLEANUP] Eliminadas {len(old_tokens)} sesiones antiguas")
+        except Exception as e:
+            print(f"[CLEANUP] Error: {e}")
 
 @app.on_event("startup")
 async def _startup():
     asyncio.create_task(ticker())
+    asyncio.create_task(cleanup_old_sessions())
 
 # -------- REST ----------
+@app.get("/health")
+def health_check():
+    """Health check endpoint para UptimeRobot y Render"""
+    from datetime import datetime
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
 class TrackIn(BaseModel):
     urlOrId: str
     enqueue: Optional[bool] = False
@@ -294,16 +517,22 @@ def api_tracks():
 async def api_add_track(payload: TrackIn):
     rec = await ensure_track(payload.urlOrId)
     if payload.enqueue:
-        await enqueue_track(rec["id"])
+        # Legacy: usar room "default"
+        room = await get_or_create_room("default")
+        await room_enqueue_track(room, rec["id"])
     return rec
 
 @app.get("/api/queue")
 async def api_queue():
-    return await up_next_detailed()
+    # Legacy endpoint: retorna cola de room "default"
+    room = await get_or_create_room("default")
+    return await room.get_queue_detailed()
 
 @app.post("/api/queue/next")
 async def api_queue_next():
-    await cmd_next()
+    # Legacy endpoint: avanza en room "default"
+    room = await get_or_create_room("default")
+    await room_cmd_next(room)
     return {"ok": True}
 
 @app.post("/api/download")
@@ -327,35 +556,131 @@ async def api_search(q: str, maxResults: int = 30):
         }
     }
 
-# Streaming con soporte de Range
-@app.get("/stream/{track_id}")
-def stream(request: Request, track_id: str):
-    file_path = os.path.join(MEDIA_DIR, f"{track_id}.mp3")
-    if not os.path.exists(file_path):
-        return JSONResponse({"error": "not found"}, status_code=404)
-    file_size = os.path.getsize(file_path)
-    range_header = request.headers.get("range")
-    if range_header is None:
-        # sin Range → stream completo
-        def full():
-            with open(file_path, "rb") as f:
-                while True:
-                    data = f.read(CHUNK)
-                    if not data: break
-                    yield data
-        return StreamingResponse(full(), media_type="audio/mpeg")
-    # con Range
-    bytes_range = range_header.replace("bytes=", "").split("-")
-    start = int(bytes_range[0]) if bytes_range[0] else 0
-    end = int(bytes_range[1]) if len(bytes_range) > 1 and bytes_range[1] else file_size - 1
-    start = max(0, start); end = min(end, file_size - 1)
-    headers = {
-        "Content-Range": f"bytes {start}-{end}/{file_size}",
-        "Accept-Ranges": "bytes",
-        "Content-Length": str(end - start + 1),
-        "Content-Type": "audio/mpeg",
-    }
-    return StreamingResponse(ranged_stream(file_path, start, end), status_code=206, headers=headers)
+# Streaming: modo directo o archivo local
+@app.api_route("/stream/{track_id}", methods=["GET", "HEAD"])
+async def stream(request: Request, track_id: str):
+    db = db_read()
+
+    if track_id not in db:
+        return JSONResponse({"error": "Track no encontrado"}, status_code=404)
+
+    track = db[track_id]
+    mode = track.get("mode", STREAMING_MODE)
+
+    # MODO DIRECTO: Proxy streaming desde YouTube (evita CORS)
+    if mode == "direct":
+        stream_url = track.get("stream_url")
+        timestamp = track.get("timestamp", 0)
+
+        # Si la URL expiró (> 5 horas), refrescarla
+        if not stream_url or time.time() - timestamp > 18000:
+            try:
+                print(f"Refrescando URL expirada para {track_id}")
+                track = await asyncio.to_thread(_get_yt_stream_info, track_id)
+                stream_url = track.get("stream_url")
+            except Exception as e:
+                print(f"Error refrescando stream: {e}")
+                return JSONResponse({"error": "No se pudo obtener stream de YouTube"}, status_code=500)
+
+        # Proxy con soporte completo para Range requests
+        import httpx
+
+        try:
+            # Preparar headers para enviar a YouTube
+            headers_to_youtube = {}
+
+            # Pasar Range header si existe (para seeking en el navegador)
+            range_header = request.headers.get("range")
+            if range_header:
+                headers_to_youtube["Range"] = range_header
+                print(f"[PROXY] Range request: {range_header}")
+
+            # Configurar timeout largo para streaming
+            timeout = httpx.Timeout(60.0, connect=10.0)
+
+            # Hacer request a YouTube con streaming
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                youtube_response = await client.get(stream_url, headers=headers_to_youtube)
+                youtube_response.raise_for_status()
+
+                # Preparar headers de respuesta
+                response_headers = {
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
+                    "Accept-Ranges": "bytes",
+                }
+
+                # Pasar Content-Length si existe
+                if "content-length" in youtube_response.headers:
+                    response_headers["Content-Length"] = youtube_response.headers["content-length"]
+
+                # Pasar Content-Range si existe (para respuestas 206)
+                if "content-range" in youtube_response.headers:
+                    response_headers["Content-Range"] = youtube_response.headers["content-range"]
+
+                # Pasar Content-Type
+                content_type = youtube_response.headers.get("content-type", "audio/webm")
+
+                # Determinar status code (200 para full content, 206 para partial)
+                status_code = youtube_response.status_code
+
+                print(f"[PROXY] YouTube response: {status_code}, Content-Length: {response_headers.get('Content-Length', 'unknown')}")
+
+                # Crear generador para streaming
+                async def stream_youtube_content():
+                    async for chunk in youtube_response.aiter_bytes(chunk_size=65536):
+                        yield chunk
+
+                return StreamingResponse(
+                    stream_youtube_content(),
+                    status_code=status_code,
+                    media_type=content_type,
+                    headers=response_headers
+                )
+
+        except httpx.HTTPStatusError as e:
+            print(f"[PROXY] HTTP error: {e.response.status_code}")
+            return JSONResponse({"error": f"YouTube error: {e.response.status_code}"}, status_code=502)
+        except httpx.TimeoutException:
+            print(f"[PROXY] Timeout streaming from YouTube")
+            return JSONResponse({"error": "Timeout streaming from YouTube"}, status_code=504)
+        except Exception as e:
+            print(f"[PROXY] Error: {e}")
+            import traceback
+            traceback.print_exc()
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    # MODO DOWNLOAD: Servir archivo local con Range support
+    else:
+        file_path = os.path.join(MEDIA_DIR, track.get("filename", f"{track_id}.mp3"))
+        if not os.path.exists(file_path):
+            return JSONResponse({"error": "Archivo no encontrado"}, status_code=404)
+
+        file_size = os.path.getsize(file_path)
+        range_header = request.headers.get("range")
+
+        if range_header is None:
+            # sin Range → stream completo
+            def full():
+                with open(file_path, "rb") as f:
+                    while True:
+                        data = f.read(CHUNK)
+                        if not data: break
+                        yield data
+            return StreamingResponse(full(), media_type="audio/mpeg")
+
+        # con Range
+        bytes_range = range_header.replace("bytes=", "").split("-")
+        start = int(bytes_range[0]) if bytes_range[0] else 0
+        end = int(bytes_range[1]) if len(bytes_range) > 1 and bytes_range[1] else file_size - 1
+        start = max(0, start); end = min(end, file_size - 1)
+        headers = {
+            "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(end - start + 1),
+            "Content-Type": "audio/mpeg",
+        }
+        return StreamingResponse(ranged_stream(file_path, start, end), status_code=206, headers=headers)
 
 @app.get("/ready/{video_id}")
 def check_ready(video_id: str):
@@ -400,40 +725,255 @@ def check_ready(video_id: str):
             "progress": progress
         }, status_code=200)
 
+# -------- Rooms REST API --------
+@app.get("/api/rooms")
+async def api_list_rooms():
+    """Lista todas las rooms disponibles"""
+    all_rooms = rooms_read()
+    return {"rooms": list(all_rooms.values())}
+
+@app.post("/api/rooms")
+async def api_create_room(
+    name: str = Body(...),
+    user_id: Optional[str] = Body(None),
+    is_public: bool = Body(True),
+    password: Optional[str] = Body(None)
+):
+    """Crea una nueva room (pública o privada con contraseña)"""
+    import uuid
+    room_id = str(uuid.uuid4())[:8]
+
+    # Si es privada y tiene contraseña, hashearla
+    password_hash = None
+    if not is_public and password:
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+    room = await get_or_create_room(room_id, user_id, is_public, password_hash)
+    room.name = name
+    await save_room_state(room)
+
+    return {
+        "room_id": room_id,
+        "name": name,
+        "is_public": is_public,
+        "requires_password": not is_public and password_hash is not None
+    }
+
+@app.post("/api/rooms/{room_id}/join")
+async def api_join_room(room_id: str, request: Request):
+    """Intenta unirse a una room (verifica contraseña si es privada)"""
+    import uuid
+
+    # Leer el body como JSON
+    try:
+        body = await request.json()
+        password = body.get("password")
+    except:
+        password = None
+
+    print(f"[JOIN] room_id={room_id}, password={'***' if password else 'None'}")
+
+    # Obtener la room
+    all_rooms = rooms_read()
+    if room_id not in all_rooms:
+        return JSONResponse({"error": "Room no encontrada"}, status_code=404)
+
+    room_data = all_rooms[room_id]
+    is_public = room_data.get("is_public", True)
+    password_hash = room_data.get("password_hash")
+
+    print(f"[JOIN] is_public={is_public}, has_hash={password_hash is not None}")
+
+    # Si es pública, permitir acceso directo
+    if is_public:
+        session_token = str(uuid.uuid4())
+        async with _sessions_lock:
+            sessions = sessions_read()
+            sessions[session_token] = {"room_id": room_id, "created_at": time.time()}
+            sessions_write(sessions)
+        return {
+            "success": True,
+            "session_token": session_token,
+            "room_id": room_id,
+            "is_public": True
+        }
+
+    # Si es privada, verificar contraseña
+    if not password:
+        return JSONResponse({"error": "Contraseña requerida"}, status_code=401)
+
+    if not password_hash:
+        return JSONResponse({"error": "Room privada sin contraseña configurada"}, status_code=500)
+
+    # Verificar contraseña con bcrypt
+    if not bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8')):
+        return JSONResponse({"error": "Contraseña incorrecta"}, status_code=401)
+
+    # Contraseña correcta, generar token de sesión
+    session_token = str(uuid.uuid4())
+    async with _sessions_lock:
+        sessions = sessions_read()
+        sessions[session_token] = {"room_id": room_id, "created_at": time.time()}
+        sessions_write(sessions)
+
+    return {
+        "success": True,
+        "session_token": session_token,
+        "room_id": room_id,
+        "is_public": False
+    }
+
+@app.get("/api/rooms/{room_id}")
+async def api_get_room(room_id: str):
+    """Obtiene información de una room"""
+    room = await get_or_create_room(room_id)
+    return {
+        "id": room.id,
+        "name": room.name,
+        "created_by": room.created_by,
+        "is_public": room.is_public,
+        "requires_password": not room.is_public and room.password_hash is not None,
+        "queue": await room.get_queue_detailed(),
+        "state": room.public_state()
+    }
+
+@app.delete("/api/rooms/{room_id}")
+async def api_delete_room(room_id: str, user_id: str = Body(...)):
+    """Elimina una room (solo el creador puede eliminarla)"""
+    # No permitir eliminar la room default
+    if room_id == "default":
+        return JSONResponse({"error": "No se puede eliminar la room por defecto"}, status_code=403)
+
+    all_rooms = rooms_read()
+    if room_id not in all_rooms:
+        return JSONResponse({"error": "Room no encontrada"}, status_code=404)
+
+    room_data = all_rooms[room_id]
+    created_by = room_data.get("created_by")
+
+    # Verificar que el usuario sea el creador
+    if created_by != user_id:
+        return JSONResponse({"error": "Solo el creador puede eliminar esta room"}, status_code=403)
+
+    # Eliminar la room de memoria y del archivo
+    async with rooms_lock:
+        if room_id in rooms:
+            # Cerrar todas las conexiones WebSocket de esta room
+            room = rooms[room_id]
+            for ws in list(room.connections):
+                try:
+                    await ws.send_json({"type": "room_deleted", "data": {"message": "Esta room ha sido eliminada"}})
+                    await ws.close()
+                except:
+                    pass
+            del rooms[room_id]
+
+        # Eliminar del archivo
+        all_rooms = rooms_read()
+        if room_id in all_rooms:
+            del all_rooms[room_id]
+            rooms_write(all_rooms)
+
+    return {"success": True, "message": "Room eliminada correctamente"}
+
 @app.get("/", response_class=HTMLResponse)
 def index():
     return FileResponse("index.html")
 
-# -------- WebSocket --------
-@app.websocket("/ws")
-async def ws_endpoint(ws: WebSocket):
-    await ws_manager.connect(ws)
+# -------- WebSocket con Rooms --------
+@app.websocket("/ws/{room_id}")
+async def ws_room_endpoint(ws: WebSocket, room_id: str):
+    await ws.accept()
+
+    # Obtener session_token de query params
+    session_token = ws.query_params.get("session_token")
+
+    # Verificar acceso a la room
+    all_rooms = rooms_read()
+    if room_id not in all_rooms:
+        await ws.send_json({"type":"room_not_found","data":{"message":"Room no encontrada, redirigiendo a default..."}})
+        await ws.close()
+        return
+
+    room_data = all_rooms[room_id]
+    is_public = room_data.get("is_public", True)
+
+    print(f"[WS] Intento de conexión a room {room_id}, is_public={is_public}, has_token={session_token is not None}")
+
+    # Si es privada, verificar session_token
+    if not is_public:
+        if not session_token:
+            print(f"[WS] Rechazado: room privada sin token")
+            await ws.send_json({"type":"error","data":{"message":"Token de sesión requerido para room privada"}})
+            await ws.close()
+            return
+
+        # Validar token
+        sessions = sessions_read()
+        if session_token not in sessions:
+            print(f"[WS] Rechazado: token inválido")
+            await ws.send_json({"type":"error","data":{"message":"Token de sesión inválido"}})
+            await ws.close()
+            return
+
+        # Verificar que el token sea para esta room
+        if sessions[session_token].get("room_id") != room_id:
+            print(f"[WS] Rechazado: token para otra room")
+            await ws.send_json({"type":"error","data":{"message":"Token no válido para esta room"}})
+            await ws.close()
+            return
+
+    print(f"[WS] Conexión aceptada a room {room_id}")
+
+    # Obtener o crear la room
+    room = await get_or_create_room(room_id)
+    room.connections.add(ws)
+
     try:
-        # Estado inicial
-        await ws.send_json({"type":"state","data":{**public_state(),"queue": await up_next_detailed()}})
+        # Enviar estado inicial de la room
+        await ws.send_json({"type":"state","data":{
+            **room.public_state(),
+            "queue": await room.get_queue_detailed(),
+            "room_id": room_id,
+            "room_name": room.name
+        }})
+
         while True:
             msg = await ws.receive_json()
             t = msg.get("type")
+
             if t == "queue:add":
                 url_or_id = msg.get("urlOrId") or msg.get("id")
-                if not url_or_id: 
-                    await ws.send_json({"type":"error","data":{"message":"urlOrId requerido"}}); 
+                if not url_or_id:
+                    await ws.send_json({"type":"error","data":{"message":"urlOrId requerido"}});
                     continue
                 try:
                     rec = await ensure_track(url_or_id)
-                    await enqueue_track(rec["id"])
+                    await room_enqueue_track(room, rec["id"])
                     await ws.send_json({"type":"ok","data":{"action":"queue:add","id":rec["id"]}})
                 except Exception as e:
                     await ws.send_json({"type":"error","data":{"message":str(e)}})
+
             elif t == "player:play":
-                await cmd_play(msg.get("at"))
+                await room_cmd_play(room, msg.get("at"))
             elif t == "player:pause":
-                await cmd_pause()
+                await room_cmd_pause(room)
             elif t == "player:seek":
-                await cmd_seek(float(msg.get("at") or 0))
+                await room_cmd_seek(room, float(msg.get("at") or 0))
             elif t == "player:next":
-                await cmd_next()
+                await room_cmd_next(room)
             elif t == "state:get":
-                await ws.send_json({"type":"state","data":{**public_state(),"queue": await up_next_detailed()}})
+                await ws.send_json({"type":"state","data":{
+                    **room.public_state(),
+                    "queue": await room.get_queue_detailed(),
+                    "room_id": room_id
+                }})
+
     except WebSocketDisconnect:
-        ws_manager.disconnect(ws)
+        room.connections.discard(ws)
+
+# WebSocket legacy (default room) para compatibilidad con frontend actual
+@app.websocket("/ws")
+async def ws_endpoint_legacy(ws: WebSocket):
+    # Redirigir a room "default"
+    await ws_room_endpoint(ws, "default")

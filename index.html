@@ -1064,6 +1064,17 @@
       <nav class="sidebar">
         <div class="sidebar-logo">
           <h1>🎵 Music Player</h1>
+          <div style="margin-top: 0.75rem; padding: 0.5rem; background: var(--spotify-gray); border-radius: 0.375rem; cursor: pointer;" @click="showRoomModal = true">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div>
+                <div style="font-size: 0.75rem; color: var(--spotify-text-subdued);">Room actual</div>
+                <div style="font-size: 0.875rem; font-weight: 500;">{{ roomName }}</div>
+              </div>
+              <svg style="width: 1rem; height: 1rem; fill: var(--spotify-text-subdued);" viewBox="0 0 24 24">
+                <path d="M7 10l5 5 5-5z"/>
+              </svg>
+            </div>
+          </div>
         </div>
 
         <div class="sidebar-nav">
@@ -1175,9 +1186,9 @@
                   <div class="song-info">
                     <div class="song-title">{{ track.title }}</div>
                     <div class="song-artist">
-                      <span v-if="track._ready">{{ mmss(track.seconds) }}</span>
+                      <span v-if="track.seconds">{{ mmss(track.seconds) }}</span>
                       <span v-else style="color: #f59e0b;">
-                        <span class="spinner"></span> Descargando...
+                        <span class="spinner"></span> Procesando...
                       </span>
                     </div>
                   </div>
@@ -1571,6 +1582,18 @@
         <div class="current-track-info">
           <div class="current-track-title">{{ state.current ? state.current.title : '—' }}</div>
           <div class="current-track-time">{{ state.positionLabel }} / {{ state.durationLabel }}</div>
+          <!-- Barra de progreso interactiva -->
+          <div v-if="state.current && state.duration > 0"
+               @click="seekToPosition($event)"
+               style="width: 100%; height: 4px; background: var(--spotify-hover); border-radius: 2px; margin-top: 0.5rem; cursor: pointer; position: relative;">
+            <div :style="{
+              width: (state.position / state.duration * 100) + '%',
+              height: '100%',
+              background: 'var(--spotify-green)',
+              borderRadius: '2px',
+              transition: 'width 0.1s linear'
+            }"></div>
+          </div>
         </div>
 
         <div v-if="state.current" style="margin-left: 1rem;">
@@ -1643,6 +1666,85 @@
     <audio id="audio" :src="audioSrc" preload="auto" playsinline class="hidden"></audio>
 
     <!-- Create Playlist Modal -->
+    <!-- Room selector modal -->
+    <div v-if="showRoomModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000;" @click="showRoomModal = false">
+      <div @click.stop style="background: var(--spotify-light-gray); border-radius: 0.5rem; padding: 2rem; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;">
+        <h2 style="margin-bottom: 1.5rem; color: var(--spotify-text);">Rooms Disponibles</h2>
+
+        <!-- Lista de rooms -->
+        <div style="margin-bottom: 1.5rem;">
+          <div v-for="room in availableRooms" :key="room.id"
+               style="padding: 1rem; background: var(--spotify-gray); border-radius: 0.375rem; margin-bottom: 0.5rem; cursor: pointer; transition: background 0.2s; display: flex; justify-content: space-between; align-items: center;"
+               :style="{ background: currentRoom === room.id ? 'var(--spotify-green)' : 'var(--spotify-gray)' }">
+            <div @click="switchRoom(room.id); showRoomModal = false" style="flex: 1;">
+              <div style="font-weight: 500;">
+                {{ room.name }}
+                <span v-if="!room.is_public" style="margin-left: 0.5rem;">🔒</span>
+              </div>
+              <div style="font-size: 0.75rem; color: var(--spotify-text-subdued); margin-top: 0.25rem;">ID: {{ room.id }}</div>
+            </div>
+            <button v-if="room.created_by === userId && room.id !== 'default'"
+                    @click.stop="deleteRoom(room.id)"
+                    style="background: var(--spotify-red); color: white; border: none; border-radius: 50%; width: 2rem; height: 2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;"
+                    title="Eliminar room">
+              🗑️
+            </button>
+          </div>
+
+          <div v-if="availableRooms.length === 0" style="text-align: center; color: var(--spotify-text-subdued); padding: 2rem;">
+            No hay rooms disponibles
+          </div>
+        </div>
+
+        <!-- Crear nueva room -->
+        <div style="border-top: 1px solid var(--spotify-hover); padding-top: 1.5rem;">
+          <h3 style="margin-bottom: 1rem; color: var(--spotify-text);">Crear Nueva Room</h3>
+
+          <input
+            v-model="newRoomName"
+            placeholder="Nombre de la room"
+            style="width: 100%; background: var(--spotify-gray); color: var(--spotify-text); border: 1px solid var(--spotify-hover); border-radius: 0.375rem; padding: 0.75rem; margin-bottom: 1rem;">
+
+          <!-- Toggle Público/Privado -->
+          <div style="margin-bottom: 1rem; padding: 0.75rem; background: var(--spotify-gray); border-radius: 0.375rem;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--spotify-text);">
+              <input type="radio" v-model="newRoomIsPublic" :value="true" name="roomType" style="cursor: pointer;">
+              <span>🌍 Pública (sin contraseña)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--spotify-text); margin-top: 0.5rem;">
+              <input type="radio" v-model="newRoomIsPublic" :value="false" name="roomType" style="cursor: pointer;">
+              <span>🔒 Privada (con contraseña)</span>
+            </label>
+          </div>
+
+          <!-- Campo de contraseña (solo si es privada) -->
+          <div v-if="!newRoomIsPublic" style="margin-bottom: 1rem;">
+            <input
+              v-model="newRoomPassword"
+              type="password"
+              placeholder="Contraseña de la room"
+              style="width: 100%; background: var(--spotify-gray); color: var(--spotify-text); border: 1px solid var(--spotify-green); border-radius: 0.375rem; padding: 0.75rem;">
+            <p style="font-size: 0.75rem; color: var(--spotify-text-subdued); margin-top: 0.5rem;">
+              💡 Comparte esta contraseña con otros para que accedan a tu room
+            </p>
+          </div>
+
+          <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+            <button @click="showRoomModal = false" class="queue-btn">
+              Cerrar
+            </button>
+            <button @click="createRoom"
+                    :disabled="!newRoomName.trim() || (!newRoomIsPublic && !newRoomPassword.trim())"
+                    class="play-btn"
+                    :style="{ opacity: (newRoomName.trim() && (newRoomIsPublic || newRoomPassword.trim())) ? 1 : 0.5 }">
+              Crear Room
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create playlist modal -->
     <div v-if="showCreatePlaylist" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000;">
       <div style="background: var(--spotify-light-gray); border-radius: 0.5rem; padding: 2rem; max-width: 400px; width: 90%;">
         <h2 style="margin-bottom: 1.5rem; color: var(--spotify-text);">Crear nueva playlist</h2>
@@ -1692,10 +1794,25 @@ new Vue({
     state: { current: null, position: 0, positionLabel: '0:00', duration: 0, durationLabel: '0:00', playing: false },
     queue: [],
     volume: Number(localStorage.getItem('vol') ?? 0.8),
-    muted: false,
+    muted: localStorage.getItem('muted') === 'true',
     rate: Number(localStorage.getItem('rate') ?? 1),
     needUserGesture: false,
     pollTimer: null,
+
+    // Rooms system
+    currentRoom: localStorage.getItem('currentRoom') || 'default',
+    userId: localStorage.getItem('userId') || (() => {
+      const id = 'user_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('userId', id);
+      return id;
+    })(),
+    availableRooms: [],
+    showRoomModal: false,
+    newRoomName: '',
+    newRoomIsPublic: true,
+    newRoomPassword: '',
+    roomName: 'Default Room',
+    sessionToken: localStorage.getItem('sessionToken') || null,
 
     // Search properties
     searchQuery: '',
@@ -1768,6 +1885,150 @@ new Vue({
       this.currentPage = page;
     },
 
+    // Rooms management
+    async loadRooms() {
+      try {
+        const response = await fetch('/api/rooms');
+        const data = await response.json();
+        this.availableRooms = data.rooms || [];
+      } catch (e) {
+        console.error('Error loading rooms:', e);
+      }
+    },
+
+    async createRoom() {
+      if (!this.newRoomName.trim()) return;
+      if (!this.newRoomIsPublic && !this.newRoomPassword.trim()) {
+        alert('Por favor ingresa una contraseña para la room privada');
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/rooms', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            name: this.newRoomName,
+            user_id: this.userId,
+            is_public: this.newRoomIsPublic,
+            password: this.newRoomIsPublic ? null : this.newRoomPassword
+          })
+        });
+        const data = await response.json();
+
+        // Mostrar la contraseña si es privada
+        if (!this.newRoomIsPublic) {
+          alert(`✅ Room privada creada!\n\n🔑 Contraseña: ${this.newRoomPassword}\n\nComparte esta contraseña con otros para que puedan acceder.`);
+        }
+
+        // Limpiar formulario
+        this.newRoomName = '';
+        this.newRoomPassword = '';
+        this.newRoomIsPublic = true;
+        this.showRoomModal = false;
+
+        await this.switchRoom(data.room_id);
+        await this.loadRooms();
+      } catch (e) {
+        console.error('Error creating room:', e);
+        alert('Error creando room: ' + e.message);
+      }
+    },
+
+    async switchRoom(roomId) {
+      // Cerrar WebSocket actual
+      if (this.ws) {
+        this.ws.close();
+        this.ws = null;
+      }
+
+      // Cargar info de la room primero
+      try {
+        const infoResponse = await fetch(`/api/rooms/${roomId}`);
+        const roomData = await infoResponse.json();
+
+        // Si la room requiere contraseña, pedirla
+        if (roomData.requires_password) {
+          const password = prompt(`🔒 Room privada: "${roomData.name}"\n\nIngresa la contraseña:`);
+          if (!password) {
+            alert('Contraseña requerida para acceder a esta room');
+            return;
+          }
+
+          // Intentar unirse con contraseña
+          const joinResponse = await fetch(`/api/rooms/${roomId}/join`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({password})
+          });
+
+          if (!joinResponse.ok) {
+            const error = await joinResponse.json();
+            alert('❌ ' + (error.error || 'Contraseña incorrecta'));
+            return;
+          }
+
+          const joinData = await joinResponse.json();
+          this.sessionToken = joinData.session_token;
+          localStorage.setItem('sessionToken', this.sessionToken);
+        } else {
+          // Room pública, obtener token sin contraseña
+          const joinResponse = await fetch(`/api/rooms/${roomId}/join`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({})
+          });
+          const joinData = await joinResponse.json();
+          this.sessionToken = joinData.session_token;
+          localStorage.setItem('sessionToken', this.sessionToken);
+        }
+
+        // Cambiar a nueva room
+        this.currentRoom = roomId;
+        localStorage.setItem('currentRoom', roomId);
+        this.roomName = roomData.name;
+
+        // Reconectar WebSocket con token
+        this.connectWS();
+
+      } catch (e) {
+        console.error('Error switching room:', e);
+        alert('Error accediendo a la room: ' + e.message);
+      }
+    },
+
+    async deleteRoom(roomId) {
+      if (!confirm('¿Estás seguro de que quieres eliminar esta room?')) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/rooms/${roomId}`, {
+          method: 'DELETE',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({user_id: this.userId})
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          alert('❌ ' + (error.error || 'Error eliminando room'));
+          return;
+        }
+
+        // Si estábamos en la room eliminada, volver a default
+        if (this.currentRoom === roomId) {
+          await this.switchRoom('default');
+        }
+
+        // Recargar lista de rooms
+        await this.loadRooms();
+        alert('✅ Room eliminada correctamente');
+      } catch (e) {
+        console.error('Error deleting room:', e);
+        alert('Error eliminando room: ' + e.message);
+      }
+    },
+
     // Mobile menu methods
     toggleMobileMenu() {
       this.showMobileMenu = !this.showMobileMenu;
@@ -1825,17 +2086,36 @@ new Vue({
     },
 
     connectWS() {
-      this.ws = new WebSocket(`${this.proto()}://${location.host}/ws`);
+      // Cerrar conexión anterior si existe
+      if (this.ws) {
+        this.ws.onclose = null; // Prevenir reconexión automática
+        this.ws.close();
+      }
+
+      // Conectar a la room actual
+      const roomPath = this.currentRoom || 'default';
+      // Agregar sessionToken a la URL si existe (y no es null/undefined)
+      const wsUrl = (this.sessionToken && this.sessionToken !== 'null' && this.sessionToken !== 'undefined')
+        ? `${this.proto()}://${location.host}/ws/${roomPath}?session_token=${this.sessionToken}`
+        : `${this.proto()}://${location.host}/ws/${roomPath}`;
+
+      console.log('[WS] Conectando a:', wsUrl);
+      this.ws = new WebSocket(wsUrl);
       this.ws.onopen = () => { this.connected = true; };
       this.ws.onclose = () => {
         this.connected = false;
-        setTimeout(this.connectWS, 1000);
+        // Solo reconectar si no estamos siendo redirigidos
+        if (!this._isRedirecting) {
+          setTimeout(this.connectWS, 1000);
+        }
       };
       this.ws.onmessage = (ev) => {
         const {type, data} = JSON.parse(ev.data);
         if (type === 'state') {
           this.state = Object.assign(this.state, data);
           this.queue = data.queue || [];
+          // Actualizar nombre de room si viene del servidor
+          if (data.room_name) this.roomName = data.room_name;
           this.syncAudio();
         } else if (type === 'queue:update') {
           this.queue = data || [];
@@ -1844,6 +2124,34 @@ new Vue({
           this.state.position = data.position;
           this.state.positionLabel = data.positionLabel;
           this.syncAudio();
+        } else if (type === 'room_not_found') {
+          console.warn('Room no encontrado, redirigiendo a default');
+          this._isRedirecting = true;
+          // Limpiar referencias al room inexistente
+          this.sessionToken = null;
+          localStorage.removeItem('sessionToken');
+          localStorage.setItem('currentRoom', 'default');
+          this.currentRoom = 'default';
+          // Reconectar al room default
+          this._isRedirecting = false;
+          this.connectWS();
+        } else if (type === 'error') {
+          console.error('WebSocket error:', data);
+          if (data.message && data.message.includes('Token') || data.message && data.message.includes('Token de sesión')) {
+            console.warn('Sesión inválida, redirigiendo a default');
+            this._isRedirecting = true;
+            // Limpiar sesión y redirigir a default
+            this.sessionToken = null;
+            localStorage.removeItem('sessionToken');
+            localStorage.setItem('currentRoom', 'default');
+            this.currentRoom = 'default';
+            // Reconectar al room default
+            this._isRedirecting = false;
+            this.connectWS();
+          }
+        } else if (type === 'room_deleted') {
+          alert('⚠️ ' + data.message);
+          this.switchRoom('default');
         }
       };
     },
@@ -1879,23 +2187,8 @@ new Vue({
     },
 
     refreshQueue() {
-      fetch('/api/queue').then(r=>r.json()).then(q=>{
-        this.queue = q || [];
-        // Only check readiness if queue has changed or every few cycles
-        if (!this._lastQueueCheck || Date.now() - this._lastQueueCheck > 15000) {
-          this.markQueueReadiness();
-          this._lastQueueCheck = Date.now();
-        } else {
-          // Apply cached readiness status without making HTTP requests
-          this.queue.forEach(t => {
-            const cached = this.readinessCache.get(t.id);
-            if (cached && cached.ready) {
-              t._ready = true;
-            }
-          });
-          this.$forceUpdate();
-        }
-      }).catch(()=>{});
+      // Solo pedir actualización por WebSocket (que usa el room correcto)
+      // NO llamar a /api/queue que siempre usa "default" y causa pestañeo
       this.wsSend('state:get', {});
     },
 
@@ -1906,7 +2199,12 @@ new Vue({
         audio.pause();
         return;
       }
-      if (audio.src !== location.origin + this.audioSrc) {
+
+      // Comparar solo el path, no el origin (para soportar redirects de YouTube)
+      const currentSrc = new URL(audio.src || 'about:blank', location.origin).pathname;
+      const newSrc = this.audioSrc;
+
+      if (currentSrc !== newSrc && audio.src !== location.origin + newSrc) {
         audio.src = this.audioSrc;
         // Apply volume when new audio loads
         setTimeout(() => this.applyVolume(), 100);
@@ -1943,12 +2241,38 @@ new Vue({
     toggleMute() {
       this.muted = !this.muted;
       document.getElementById('audio').muted = this.muted;
+      try {
+        localStorage.setItem('muted', String(this.muted));
+      } catch (e) {
+        // Modo incógnito puede bloquear localStorage
+        console.warn('No se pudo guardar estado de mute:', e);
+      }
     },
 
     applyRate() {
       if (!this.rate || this.rate < 0.5) this.rate = 1;
       document.getElementById('audio').playbackRate = this.rate;
       localStorage.setItem('rate', String(this.rate));
+    },
+
+    seekToPosition(event) {
+      if (!this.state.current || this.state.duration <= 0) return;
+
+      const progressBar = event.currentTarget;
+      const rect = progressBar.getBoundingClientRect();
+      const clickX = event.clientX - rect.left;
+      const percentage = clickX / rect.width;
+      const newPosition = Math.floor(this.state.duration * percentage);
+
+      // Enviar comando de seek al servidor
+      this.wsSend('player:seek', { at: newPosition });
+
+      // Actualizar posición local inmediatamente para feedback visual
+      this.state.position = newPosition;
+      const audio = document.getElementById('audio');
+      if (audio && !isNaN(audio.duration)) {
+        audio.currentTime = newPosition;
+      }
     },
 
     async enableAudio() {
@@ -2059,14 +2383,18 @@ new Vue({
     async addToQueue(videoId) {
       this.adding.push({show: videoId});
       try {
-        await fetch('/api/tracks', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({urlOrId: videoId, enqueue: true})
-        });
+        // Usar WebSocket para agregar a la cola del room actual
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({
+            type: 'queue:add',
+            urlOrId: videoId
+          }));
+        } else {
+          throw new Error('WebSocket no conectado al room actual');
+        }
         setTimeout(this.refreshQueue, 500);
       } catch(e) {
-        alert('Error agregando: ' + e.message);
+        alert('Error agregando a la cola del room ' + this.roomName + ': ' + e.message);
       } finally {
         this.adding.shift();
       }
@@ -2619,13 +2947,13 @@ new Vue({
         case 'downloading':
           return '● Descargando...';
         case 'not_found':
-          return '● Descargando...';
+          return '● Listo'; // En modo streaming, no se descarga
         case 'checking':
-          return '● Descargando...';
+          return '● Listo'; // En modo streaming, siempre está listo
         case 'error':
           return '● Error';
         default:
-          return '● Descargando...';
+          return '● Listo'; // Por defecto, mostrar como listo
       }
     },
 
@@ -2766,20 +3094,67 @@ new Vue({
     // Setup audio element
     const audio = document.getElementById('audio');
 
-    // Apply volume and rate from localStorage immediately
+    // Apply volume, rate and mute from localStorage immediately
     this.applyVolume();
     this.applyRate();
+    audio.muted = this.muted;
 
     audio.addEventListener('canplay', () => {
-      // Ensure volume is applied when audio is ready
+      // Ensure volume and mute are applied when audio is ready
       this.applyVolume();
+      audio.muted = this.muted;
       if (this.state.playing) this.enableAudio();
+
+      // Limpiar contador de reintentos al cargar exitosamente
+      if (this.state.current && this._audioRetries) {
+        delete this._audioRetries[this.state.current.id];
+      }
     });
 
     // Also apply volume when audio loads
     audio.addEventListener('loadeddata', () => {
       this.applyVolume();
     });
+
+    // Handle streaming errors (URLs expiradas, CORS, etc)
+    audio.addEventListener('error', async (e) => {
+      console.error('Error en audio stream:', e);
+      if (this.state.current) {
+        // Evitar bucle infinito: no reintentar si está en "Procesando..."
+        if (this.state.current.title === 'Procesando...') {
+          console.log('Track aún procesando, esperando...');
+          return;
+        }
+
+        // Limitar reintentos
+        if (!this._audioRetries) this._audioRetries = {};
+        const currentId = this.state.current.id;
+        this._audioRetries[currentId] = (this._audioRetries[currentId] || 0) + 1;
+
+        if (this._audioRetries[currentId] > 3) {
+          console.error('Demasiados reintentos para', currentId);
+          this.pause();
+          delete this._audioRetries[currentId];
+          return;
+        }
+
+        console.log(`Intentando refrescar stream (intento ${this._audioRetries[currentId]}/3)...`);
+        // El backend auto-refresca la URL en /stream/{id}
+        audio.src = `/stream/${currentId}?t=${Date.now()}`;
+        if (this.state.playing) {
+          setTimeout(() => audio.play().catch(console.error), 500);
+        }
+      }
+    });
+
+    // Handle end of track - auto advance to next
+    audio.addEventListener('ended', () => {
+      console.log('Canción terminada, avanzando a la siguiente...');
+      this.next();
+    });
+
+    // Load available rooms
+    this.loadRooms();
 
     // Connect WebSocket and start polling
     this.connectWS();

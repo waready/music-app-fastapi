@@ -181,16 +181,64 @@ async def search_youtube_async(query: str, max_results: int = 20) -> List[Dict[s
     return await asyncio.to_thread(_search_youtube, query, max_results)
 
 # ---- Streaming Directo / Descarga con yt-dlp ----
+def _try_alternative_extractor(url_or_id: str) -> Dict[str, Any]:
+    """Intenta usar extractores alternativos cuando YouTube falla"""
+    try:
+        # Intento con configuración mínima usando solo metadatos básicos
+        ydl_opts_minimal = {
+            "quiet": True,
+            "no_warnings": True,
+            "extract_flat": True,
+            "skip_download": True,
+            "format": "worst",
+            "user_agent": get_random_user_agent(),
+        }
+
+        with YoutubeDL(ydl_opts_minimal) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={url_or_id}", download=False)
+
+            if info and info.get('id'):
+                # Crear registro con info básica sin stream URL
+                rec = {
+                    "id": info.get('id'),
+                    "title": info.get('title', 'Título no disponible'),
+                    "seconds": int(info.get('duration', 0) or 0),
+                    "stream_url": None,  # No hay URL directa
+                    "timestamp": time.time(),
+                    "thumbnail": f"https://i.ytimg.com/vi/{info.get('id')}/hqdefault.jpg",
+                    "mode": "unavailable",  # Modo especial para indicar que no está disponible
+                    "error": "YouTube blocking direct access"
+                }
+
+                db = db_read()
+                db[info.get('id')] = rec
+                db_write(db)
+                return rec
+
+    except Exception as e:
+        print(f"[ALTERNATIVE] También falló extractor alternativo: {e}")
+
+    return None
+
 def _get_yt_stream_info(url_or_id: str) -> Dict[str, Any]:
     """Extrae metadata + URL de streaming directo SIN descargar (modo 'direct')"""
     db = db_read()
 
-    # Si ya existe y la URL no expiró (< 5 horas), retornar
+    # Si ya existe, verificar si podemos usarlo
     if url_or_id in db:
         cached = db[url_or_id]
         timestamp = cached.get("timestamp", 0)
-        # URLs de YouTube expiran en ~6 horas, refrescamos a las 5h
-        if time.time() - timestamp < 18000:  # 5 horas = 18000 seg
+        mode = cached.get("mode", "direct")
+
+        # Para tracks no disponibles, mantener el cache por 2 horas antes de reintentar
+        if mode == "unavailable":
+            if time.time() - timestamp < 7200:  # 2 horas
+                return cached
+            else:
+                print(f"[CACHE] Reintentando track previamente no disponible: {url_or_id}")
+
+        # Para tracks exitosos, URLs expiran en ~6 horas, refrescamos a las 5h
+        elif time.time() - timestamp < 18000:  # 5 horas = 18000 seg
             return cached
 
     ydl_opts = {
@@ -272,7 +320,15 @@ def _get_yt_stream_info(url_or_id: str) -> Dict[str, Any]:
             elif i == len(fallback_configs) - 1:
                 break
 
-    print(f"[YT-DLP] Todos los intentos fallaron. Último error: {last_error}")
+    print(f"[YT-DLP] Todos los intentos fallaron. Intentando extractor alternativo...")
+
+    # Último intento con extractor alternativo
+    alternative_result = _try_alternative_extractor(url_or_id)
+    if alternative_result:
+        print(f"[ALTERNATIVE] Éxito con extractor alternativo para {url_or_id}")
+        return alternative_result
+
+    print(f"[YT-DLP] Todos los extractores fallaron. Último error: {last_error}")
     raise last_error
 
 def _download_yt_to_mp3(url_or_id: str) -> Dict[str, Any]:
@@ -622,11 +678,34 @@ async def _startup():
 # -------- REST ----------
 @app.get("/health")
 def health_check():
-    """Health check endpoint para UptimeRobot y Render"""
+    """Health check endpoint para UptimeRobot y Render con estadísticas"""
     from datetime import datetime
+
+    # Estadísticas básicas
+    db = db_read()
+    total_tracks = len(db)
+    unavailable_tracks = len([t for t in db.values() if t.get("mode") == "unavailable"])
+    success_rate = ((total_tracks - unavailable_tracks) / total_tracks * 100) if total_tracks > 0 else 100
+
+    # Estado del sistema de detección de bot
+    cooldown_active = is_bot_detection_active()
+
+    status = "healthy"
+    if success_rate < 50:
+        status = "degraded"
+    if cooldown_active:
+        status = "limited"
+
     return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat()
+        "status": status,
+        "timestamp": datetime.utcnow().isoformat(),
+        "stats": {
+            "total_tracks": total_tracks,
+            "unavailable_tracks": unavailable_tracks,
+            "success_rate": round(success_rate, 1),
+            "bot_detection_count": bot_detection_count,
+            "cooldown_active": cooldown_active
+        }
     }
 
 class TrackIn(BaseModel):
@@ -636,6 +715,39 @@ class TrackIn(BaseModel):
 @app.get("/api/tracks")
 def api_tracks():
     return list(db_read().values())
+
+@app.post("/api/admin/clear-cache")
+def api_clear_cache(track_ids: List[str] = Body(default=[])):
+    """Limpia el cache de tracks específicos o todos si no se especifican"""
+    db = db_read()
+
+    if not track_ids:
+        # Limpiar solo tracks no disponibles
+        cleared = 0
+        for track_id in list(db.keys()):
+            if db[track_id].get("mode") == "unavailable":
+                del db[track_id]
+                cleared += 1
+        db_write(db)
+        return {"message": f"Cache limpiado: {cleared} tracks no disponibles eliminados"}
+    else:
+        # Limpiar tracks específicos
+        cleared = 0
+        for track_id in track_ids:
+            if track_id in db:
+                del db[track_id]
+                cleared += 1
+        db_write(db)
+        return {"message": f"Cache limpiado: {cleared} tracks eliminados"}
+
+@app.post("/api/admin/reset-bot-detection")
+def api_reset_bot_detection():
+    """Resetea el contador de detección de bot manualmente"""
+    global bot_detection_count, last_bot_detection
+    old_count = bot_detection_count
+    bot_detection_count = 0
+    last_bot_detection = 0
+    return {"message": f"Contador de detección de bot reseteado (era: {old_count})"}
 
 @app.post("/api/tracks")
 async def api_add_track(payload: TrackIn):
@@ -690,6 +802,16 @@ async def stream(request: Request, track_id: str):
 
     track = db[track_id]
     mode = track.get("mode", STREAMING_MODE)
+
+    # MODO NO DISPONIBLE: YouTube está bloqueando el acceso
+    if mode == "unavailable":
+        error_msg = track.get("error", "Track no disponible temporalmente")
+        return JSONResponse({
+            "error": error_msg,
+            "message": "YouTube está bloqueando el acceso desde este servidor. Intenta más tarde.",
+            "track_id": track_id,
+            "title": track.get("title", "Unknown")
+        }, status_code=503)
 
     # MODO DIRECTO: Proxy streaming desde YouTube (evita CORS)
     if mode == "direct":
@@ -1078,10 +1200,23 @@ async def ws_room_endpoint(ws: WebSocket, room_id: str):
                     continue
                 try:
                     rec = await ensure_track(url_or_id)
+                    if rec.get("mode") == "unavailable":
+                        await ws.send_json({
+                            "type":"warning",
+                            "data":{
+                                "message":"Track agregado pero puede no reproducirse debido a restricciones de YouTube",
+                                "track": {"id": rec["id"], "title": rec["title"]},
+                                "action":"queue:add"
+                            }
+                        })
+                    else:
+                        await ws.send_json({"type":"ok","data":{"action":"queue:add","id":rec["id"]}})
                     await room_enqueue_track(room, rec["id"])
-                    await ws.send_json({"type":"ok","data":{"action":"queue:add","id":rec["id"]}})
                 except Exception as e:
-                    await ws.send_json({"type":"error","data":{"message":str(e)}})
+                    error_msg = str(e)
+                    if "Servicio temporalmente no disponible" in error_msg:
+                        error_msg = "YouTube está bloqueando las solicitudes. Intenta más tarde."
+                    await ws.send_json({"type":"error","data":{"message":error_msg}})
 
             elif t == "player:play":
                 await room_cmd_play(room, msg.get("at"))

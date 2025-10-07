@@ -1954,15 +1954,27 @@ new Vue({
       this.currentPage = page;
     },
 
-    // Obtener título a mostrar (preferir título real del estado actual si está disponible)
+    // Obtener título a mostrar (preferir título real actualizado)
     getDisplayTitle(track) {
+      // Primero verificar si tenemos metadata preservada para este track
+      const preserved = this.preservedMetadata.get(track.id);
+      if (preserved && preserved.title && !preserved.failed) {
+        return preserved.title;
+      }
+
       // Si es el track actual y tenemos título real, usar ese
       if (this.state.current && this.state.current.id === track.id &&
           this.state.current.title && !this.state.current.title.startsWith('YouTube Video')) {
         return this.state.current.title;
       }
-      // Si no, usar el título del track o placeholder
-      return track.title || `YouTube Video ${track.id}`;
+
+      // Si el track tiene título actualizado (no placeholder), usarlo
+      if (track.title && !track.title.startsWith('YouTube Video')) {
+        return track.title;
+      }
+
+      // Por último, usar placeholder
+      return `YouTube Video ${track.id}`;
     },
 
     // === HYBRID PLAYER SYSTEM ===
@@ -3021,6 +3033,9 @@ new Vue({
                   title: metadata.title,
                   duration: metadata.duration
                 });
+
+                // Force Vue.js to update the UI to reflect metadata changes
+                this.$forceUpdate();
 
                 // Update server metadata
                 try {

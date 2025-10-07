@@ -1590,7 +1590,11 @@
           <div class="current-track-title">
             {{ state.current ? state.current.title : '—' }}
             <span v-if="state.current" style="font-size: 0.7rem; margin-left: 0.5rem; opacity: 0.7;">
-              {{ isUsingYouTubePlayer ? '📺' : (hasAdBlocker ? '🚫📺' : '🎵') }}
+              {{
+                isMobile ? '📱' :
+                isUsingYouTubePlayer ? '📺' :
+                (hasAdBlocker ? '🚫📺' : '🎵')
+              }}
             </span>
           </div>
           <div class="current-track-time">{{ state.positionLabel }} / {{ state.durationLabel }}</div>
@@ -1795,8 +1799,13 @@
       @ended="onAudioEnded"
       @loadedmetadata="onAudioLoaded"
       @error="onAudioError"
+      :controls="isMobile"
       preload="none"
-      style="display: none;">
+      :style="{
+        display: isMobile && currentAudioUrl ? 'block' : 'none',
+        width: isMobile ? '100%' : 'auto',
+        marginTop: isMobile ? '1rem' : '0'
+      }">
     </audio>
 
     <!-- Elemento audio original para compatibilidad -->
@@ -1853,6 +1862,8 @@ new Vue({
     isUsingYouTubePlayer: false,
     hasAdBlocker: false,
     youtubePositionInterval: null,
+    isMobile: false,
+    userInteracted: false,
 
     // Search properties
     searchQuery: '',
@@ -1953,6 +1964,19 @@ new Vue({
       }
     },
 
+    // Detectar dispositivo móvil
+    detectMobileDevice() {
+      const userAgent = navigator.userAgent.toLowerCase();
+      const mobileKeywords = ['mobile', 'android', 'iphone', 'ipad', 'ipod', 'blackberry', 'windows phone'];
+
+      this.isMobile = mobileKeywords.some(keyword => userAgent.includes(keyword)) ||
+                     window.innerWidth <= 768 ||
+                     ('ontouchstart' in window);
+
+      console.log(`[HYBRID] Mobile device detected: ${this.isMobile}`);
+      return this.isMobile;
+    },
+
     // Detectar bloqueador de anuncios
     async detectAdBlocker() {
       try {
@@ -1969,27 +1993,55 @@ new Vue({
         this.hasAdBlocker = testAd.offsetHeight === 0;
         document.body.removeChild(testAd);
 
-        console.log(`Ad blocker detected: ${this.hasAdBlocker}`);
+        console.log(`[HYBRID] Ad blocker detected: ${this.hasAdBlocker}`);
       } catch (e) {
-        console.warn('Could not detect ad blocker:', e);
+        console.warn('[HYBRID] Could not detect ad blocker:', e);
+      }
+    },
+
+    // Configurar gestión de interacción del usuario para móviles
+    setupUserInteractionHandlers() {
+      if (this.isMobile) {
+        const events = ['touchstart', 'touchend', 'click', 'tap'];
+        const handleInteraction = () => {
+          if (!this.userInteracted) {
+            this.userInteracted = true;
+            console.log('[HYBRID] User interaction detected on mobile');
+
+            // Remover listeners después de la primera interacción
+            events.forEach(event => {
+              document.removeEventListener(event, handleInteraction);
+            });
+          }
+        };
+
+        events.forEach(event => {
+          document.addEventListener(event, handleInteraction, { passive: true });
+        });
+      } else {
+        this.userInteracted = true; // Desktop no necesita interacción previa
       }
     },
 
     // Reproducir usando el sistema híbrido
     async playHybrid(videoId) {
-      console.log(`[HYBRID] Playing ${videoId} in hybrid mode`);
+      console.log(`[HYBRID] Playing ${videoId} - Mobile: ${this.isMobile}, UserInteracted: ${this.userInteracted}`);
 
-      // Priorizar YouTube Player si está disponible
+      // MÓVILES: Priorizar audio nativo
+      if (this.isMobile) {
+        console.log(`[HYBRID] Mobile mode - using native audio for ${videoId}`);
+        return await this.playMobileAudio(videoId);
+      }
+
+      // DESKTOP: Priorizar YouTube Player si está disponible
       if (this.youtubePlayerReady && this.youtubePlayer) {
         try {
           this.isUsingYouTubePlayer = true;
 
           // Actualizar título inmediatamente
           if (this.state.current && this.state.current.id === videoId) {
-            // Si ya tenemos metadata, usarla
             console.log(`[HYBRID] Using existing metadata for ${videoId}`);
           } else {
-            // Actualizar con título básico mientras carga
             this.state.current = {
               id: videoId,
               title: 'Cargando desde YouTube...'
@@ -2006,7 +2058,53 @@ new Vue({
         }
       }
 
-      // Fallback: intentar obtener URL directa del servidor
+      // Fallback universal: intentar obtener URL directa del servidor
+      return await this.playServerAudio(videoId);
+    },
+
+    // Reproducción específica para móviles
+    async playMobileAudio(videoId) {
+      try {
+        this.isUsingYouTubePlayer = false;
+
+        // Verificar si necesitamos interacción del usuario
+        if (!this.userInteracted) {
+          console.log('[HYBRID] Waiting for user interaction on mobile...');
+          this.showMobilePlayButton(videoId);
+          return false;
+        }
+
+        console.log('[HYBRID] Attempting mobile audio playback...');
+
+        // Intentar obtener stream del servidor
+        const response = await fetch(`/stream/${videoId}`, { method: 'HEAD' });
+
+        if (response.ok) {
+          this.currentAudioUrl = `/stream/${videoId}`;
+          this.$refs.audioPlayer.src = this.currentAudioUrl;
+
+          // Configurar para móviles
+          this.$refs.audioPlayer.load();
+          await this.$refs.audioPlayer.play();
+
+          console.log(`[HYBRID] Mobile audio playback successful for ${videoId}`);
+          return true;
+        } else {
+          // Fallback: abrir en YouTube app
+          console.log('[HYBRID] Server stream failed, offering YouTube app option');
+          this.showYouTubeAppOption(videoId);
+          return false;
+        }
+      } catch (e) {
+        console.warn('[HYBRID] Mobile audio failed:', e);
+        // Último recurso: YouTube app
+        this.showYouTubeAppOption(videoId);
+        return false;
+      }
+    },
+
+    // Reproducción de audio del servidor
+    async playServerAudio(videoId) {
       try {
         this.isUsingYouTubePlayer = false;
         const response = await fetch(`/stream/${videoId}`, { method: 'HEAD' });
@@ -2024,6 +2122,21 @@ new Vue({
 
       console.error(`[HYBRID] All playback methods failed for ${videoId}`);
       return false;
+    },
+
+    // Mostrar botón de play para móviles (requiere interacción)
+    showMobilePlayButton(videoId) {
+      this.showNotification(`Toca para reproducir - ${this.state.current?.title || videoId}`, 'info');
+      // El usuario debe tocar play manualmente
+    },
+
+    // Opción de abrir en YouTube app
+    showYouTubeAppOption(videoId) {
+      const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+      this.showNotification(
+        `Problemas de reproducción. <a href="${youtubeUrl}" target="_blank" style="color: var(--spotify-green);">Abrir en YouTube</a>`,
+        'warning'
+      );
     },
 
     // Pausar/reanudar
@@ -3429,16 +3542,25 @@ new Vue({
 
     // Initialize Hybrid Player System
     this.$nextTick(() => {
-      this.detectAdBlocker();
+      // Detectar tipo de dispositivo primero
+      this.detectMobileDevice();
+      this.setupUserInteractionHandlers();
 
-      // Initialize YouTube Player when API is ready
-      if (typeof YT !== 'undefined' && YT.Player) {
-        this.initYouTubePlayer();
-      } else {
-        // Wait for YouTube API to load
-        window.onYouTubeIframeAPIReady = () => {
+      // Solo en desktop, detectar ad blocker y configurar YouTube Player
+      if (!this.isMobile) {
+        this.detectAdBlocker();
+
+        // Initialize YouTube Player when API is ready (solo desktop)
+        if (typeof YT !== 'undefined' && YT.Player) {
           this.initYouTubePlayer();
-        };
+        } else {
+          // Wait for YouTube API to load
+          window.onYouTubeIframeAPIReady = () => {
+            this.initYouTubePlayer();
+          };
+        }
+      } else {
+        console.log('[HYBRID] Mobile device detected - skipping YouTube Player initialization');
       }
     });
 

@@ -2591,16 +2591,21 @@ new Vue({
           this.queue = data.queue || [];
 
           // Preservar título real del YouTube Player si es mejor que el placeholder
+          // Solo preservar si el nuevo título del servidor es un placeholder y tenemos un título mejor
           if (preservedTitle && this.state.current &&
               this.state.current.title.startsWith('YouTube Video') &&
-              preservedTitle !== this.state.current.title) {
+              preservedTitle !== this.state.current.title &&
+              preservedTitle !== 'Cargando desde YouTube...' &&
+              !preservedTitle.startsWith('YouTube Video')) {
             this.state.current.title = preservedTitle;
             console.log('[HYBRID] Preserved real title:', preservedTitle);
           }
 
           // Preservar duración real del YouTube Player si es mejor que el placeholder
+          // Solo preservar si la duración del servidor es un placeholder y tenemos una mejor
           if (preservedDuration &&
               (this.state.duration === 180 || this.state.duration === 0) &&
+              preservedDuration !== this.state.duration &&
               Math.abs(this.state.duration - preservedDuration) > 1) {
             this.state.duration = preservedDuration;
             this.state.durationLabel = this.mmss(preservedDuration);

@@ -4,7 +4,10 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Body
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from yt_dlp import YoutubeDL
+# Reemplazado yt-dlp con pytubefix para evitar bot detection
+# from yt_dlp import YoutubeDL
+from pytubefix import YouTube, Search
+from pytubefix.exceptions import VideoUnavailable, PytubeFixError
 import bcrypt
 
 # Modo de streaming: "direct" (desde YouTube) o "download" (descargar MP3)
@@ -115,74 +118,79 @@ async def adaptive_delay():
 def _refresh_track_background(url_or_id: str):
     """Refresca un track en background sin bloquear"""
     try:
-        _get_yt_stream_info(url_or_id)
+        _get_yt_stream_info_pytubefix(url_or_id)
         print(f"[BACKGROUND] Refresh exitoso para {url_or_id}")
     except Exception as e:
         print(f"[BACKGROUND] Error refrescando {url_or_id}: {e}")
 
 # ---- Búsqueda en YouTube ----
-def _search_youtube(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
-    """Buscar videos en YouTube usando yt-dlp"""
-    ydl_opts = {
-        'quiet': True,
-        'no_warnings': True,
-        'extract_flat': True,
-        'default_search': 'ytsearch',
-        'user_agent': get_random_user_agent(),
-        'referer': "https://www.youtube.com/",
-        'socket_timeout': 30,
-        'retries': 2,
-        'http_headers': {
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-us,en;q=0.5",
-            "Sec-Fetch-Mode": "navigate",
-        }
-    }
-
-    try:
-        with YoutubeDL(ydl_opts) as ydl:
-            search_query = f"ytsearch{max_results}:{query}"
-            results = ydl.extract_info(search_query, download=False)
-
-            if not results or 'entries' not in results:
-                return []
-
-            formatted_results = []
-            for item in results['entries']:
-                if item:
-                    video_id = item.get('id')
-                    # Formato compatible con frontend
-                    formatted_results.append({
-                        'id': {
-                            'kind': 'youtube#video',
-                            'videoId': video_id
-                        },
-                        'snippet': {
-                            'title': item.get('title'),
-                            'description': item.get('description', '')[:100] if item.get('description') else '',
-                            'thumbnails': {
-                                'default': {'url': f"https://i.ytimg.com/vi/{video_id}/default.jpg"},
-                                'medium': {'url': f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg"},
-                                'high': {'url': f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"}
-                            },
-                            'channelTitle': item.get('channel') or item.get('uploader', 'Unknown'),
-                        },
-                        'duration': item.get('duration', 0),
-                        'url': f"https://www.youtube.com/watch?v={video_id}"
-                    })
-
-            return formatted_results
-    except Exception as e:
-        print(f"Error searching YouTube: {e}")
-        return []
+def _search_youtube_deprecated(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
+    """Buscar videos en YouTube usando yt-dlp - DEPRECATED: usar pytubefix"""
+    print("[DEPRECATED] _search_youtube_deprecated called - use pytubefix instead")
+    return []
 
 async def search_youtube_async(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
-    """Ejecuta búsqueda en hilo para no bloquear el loop"""
-    return await asyncio.to_thread(_search_youtube, query, max_results)
+    """Ejecuta búsqueda en hilo para no bloquear el loop - DEPRECATED"""
+    return await asyncio.to_thread(_search_youtube_deprecated, query, max_results)
+
+def _search_youtube_pytubefix(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
+    """Buscar videos en YouTube usando pytubefix (reemplazo de yt-dlp)"""
+    try:
+        print(f"[PYTUBEFIX] Buscando: {query} (max: {max_results})")
+        s = Search(query)
+
+        formatted_results = []
+        count = 0
+
+        for video in s.results:
+            if count >= max_results:
+                break
+
+            try:
+                # Obtener duración (puede requerir acceso adicional al video)
+                duration = 0
+                try:
+                    duration = video.length or 0
+                except:
+                    duration = 0
+
+                formatted_results.append({
+                    'id': {
+                        'kind': 'youtube#video',
+                        'videoId': video.video_id
+                    },
+                    'snippet': {
+                        'title': video.title,
+                        'description': '',  # pytubefix no proporciona descripción en búsqueda
+                        'thumbnails': {
+                            'default': {
+                                'url': f"https://i.ytimg.com/vi/{video.video_id}/hqdefault.jpg"
+                            }
+                        },
+                        'channelTitle': video.author or 'Unknown',
+                    },
+                    'duration': duration,
+                    'url': video.watch_url
+                })
+                count += 1
+            except Exception as e:
+                print(f"[PYTUBEFIX] Error procesando video {video.video_id}: {e}")
+                continue
+
+        print(f"[PYTUBEFIX] Encontrados {len(formatted_results)} resultados para '{query}'")
+        return formatted_results
+
+    except Exception as e:
+        print(f"[PYTUBEFIX] Error buscando en YouTube: {e}")
+        return []
+
+async def search_youtube_pytubefix_async(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
+    """Ejecuta búsqueda pytubefix en hilo para no bloquear el loop"""
+    return await asyncio.to_thread(_search_youtube_pytubefix, query, max_results)
 
 # ---- Streaming Directo / Descarga con yt-dlp ----
-def _try_alternative_extractor(url_or_id: str) -> Dict[str, Any]:
-    """Intenta usar extractores alternativos cuando YouTube falla"""
+def _try_alternative_extractor_deprecated(url_or_id: str) -> Dict[str, Any]:
+    """Intenta usar extractores alternativos cuando YouTube falla - DEPRECATED"""
     try:
         # Intento con configuración mínima usando solo metadatos básicos
         ydl_opts_minimal = {
@@ -194,41 +202,29 @@ def _try_alternative_extractor(url_or_id: str) -> Dict[str, Any]:
             "user_agent": get_random_user_agent(),
         }
 
-        with YoutubeDL(ydl_opts_minimal) as ydl:
-            info = ydl.extract_info(f"https://www.youtube.com/watch?v={url_or_id}", download=False)
-
-            if info and info.get('id'):
-                # Crear registro con info básica sin stream URL
-                rec = {
-                    "id": info.get('id'),
-                    "title": info.get('title', 'Título no disponible'),
-                    "seconds": int(info.get('duration', 0) or 0),
-                    "stream_url": None,  # No hay URL directa
-                    "timestamp": time.time(),
-                    "thumbnail": f"https://i.ytimg.com/vi/{info.get('id')}/hqdefault.jpg",
-                    "mode": "unavailable",  # Modo especial para indicar que no está disponible
-                    "error": "YouTube blocking direct access"
-                }
-
-                db = db_read()
-                db[info.get('id')] = rec
-                db_write(db)
-                return rec
+        # DEPRECATED: Función reemplazada por pytubefix
+        return None
+        # DEPRECATED: Código comentado - usar pytubefix
 
     except Exception as e:
         print(f"[ALTERNATIVE] También falló extractor alternativo: {e}")
 
     return None
 
-def _get_yt_stream_info(url_or_id: str) -> Dict[str, Any]:
-    """Extrae metadata + URL de streaming directo SIN descargar (modo 'direct')"""
+def _get_yt_stream_info_deprecated(url_or_id: str) -> Dict[str, Any]:
+    """Extrae metadata + URL de streaming directo SIN descargar (modo 'direct') - DEPRECATED"""
+    print("[DEPRECATED] _get_yt_stream_info_deprecated called - use pytubefix instead")
+    raise Exception("yt-dlp deprecated, use pytubefix instead")
+
+def _get_yt_stream_info_pytubefix(url_or_id: str) -> Dict[str, Any]:
+    """Extrae metadata + URL de streaming usando pytubefix (reemplazo de yt-dlp)"""
     db = db_read()
 
     # Si ya existe, verificar si podemos usarlo
     if url_or_id in db:
         cached = db[url_or_id]
         timestamp = cached.get("timestamp", 0)
-        mode = cached.get("mode", "direct")
+        mode = cached.get("mode", "pytubefix")
 
         # Para tracks no disponibles, mantener el cache por 2 horas antes de reintentar
         if mode == "unavailable":
@@ -241,95 +237,72 @@ def _get_yt_stream_info(url_or_id: str) -> Dict[str, Any]:
         elif time.time() - timestamp < 18000:  # 5 horas = 18000 seg
             return cached
 
-    ydl_opts = {
-        "format": "bestaudio/best",
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
-        # Opciones para mejorar estabilidad
-        "socket_timeout": 30,
-        "retries": 3,
-        # Opciones para evitar detección de bot
-        "cookiefile": None,
-        "extract_flat": False,
-        "writesubtitles": False,
-        "writeautomaticsub": False,
-        "writeinfojson": False,
-        "user_agent": get_random_user_agent(),
-        "referer": "https://www.youtube.com/",
-        "sleep_interval_requests": 1,
-        "sleep_interval_subtitles": 1,
-        "sleep_interval": 1,
-        # Headers adicionales para parecer más humano
-        "http_headers": {
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-us,en;q=0.5",
-            "Sec-Fetch-Mode": "navigate",
+    # Construir URL completa si solo tenemos ID
+    video_url = url_or_id
+    if not url_or_id.startswith("http"):
+        video_url = f"https://www.youtube.com/watch?v={url_or_id}"
+
+    try:
+        print(f"[PYTUBEFIX] Extrayendo información para {url_or_id}")
+        yt = YouTube(video_url)
+
+        # Obtener metadata básica
+        vid = yt.video_id
+        title = yt.title
+        duration = yt.length or 0
+
+        # Obtener stream de audio de mejor calidad
+        audio_stream = yt.streams.get_audio_only()
+        if not audio_stream:
+            # Fallback: intentar con cualquier stream de audio
+            audio_stream = yt.streams.filter(only_audio=True).first()
+
+        if not audio_stream:
+            raise Exception("No se encontró stream de audio disponible")
+
+        # Obtener URL del stream
+        stream_url = audio_stream.url
+
+        rec = {
+            "id": vid,
+            "title": title,
+            "seconds": duration,
+            "stream_url": stream_url,
+            "timestamp": time.time(),
+            "thumbnail": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
+            "mode": "pytubefix"
         }
+
+        # Guardar en DB
+        db = db_read()
+        db[vid] = rec
+        db_write(db)
+        print(f"[PYTUBEFIX] Éxito extrayendo {title} ({duration}s)")
+        return rec
+
+    except VideoUnavailable as e:
+        error_msg = f"Video no disponible: {e}"
+        print(f"[PYTUBEFIX] {error_msg}")
+    except PytubeFixError as e:
+        error_msg = f"Error de PyTubeFix: {e}"
+        print(f"[PYTUBEFIX] {error_msg}")
+    except Exception as e:
+        error_msg = f"Error inesperado: {e}"
+        print(f"[PYTUBEFIX] {error_msg}")
+
+    # Marcar como no disponible en la DB
+    rec = {
+        "id": url_or_id,
+        "title": f"Video {url_or_id} (No disponible)",
+        "seconds": 0,
+        "timestamp": time.time(),
+        "error": error_msg,
+        "mode": "unavailable"
     }
-
-    # Intentar múltiples configuraciones para evitar bloqueos
-    fallback_configs = [
-        ydl_opts,  # Configuración principal
-        {**ydl_opts, "format": "worst/bestaudio", "source_address": "0.0.0.0"},  # Fallback 1
-        {**ydl_opts, "format": "18/worst", "extractor_retries": 1},  # Fallback 2
-    ]
-
-    last_error = None
-    for i, config in enumerate(fallback_configs):
-        try:
-            print(f"[YT-DLP] Intento {i+1}/3 para {url_or_id}")
-            with YoutubeDL(config) as ydl:
-                info = ydl.extract_info(url_or_id, download=False)
-
-                vid = info.get("id")
-                title = info.get("title")
-                duration = int(info.get("duration") or 0)
-
-                # URL directa del stream de audio
-                stream_url = info.get("url")
-
-                if not stream_url:
-                    raise Exception("No se pudo obtener URL de stream")
-
-                rec = {
-                    "id": vid,
-                    "title": title,
-                    "seconds": duration,
-                    "stream_url": stream_url,
-                    "timestamp": time.time(),
-                    "thumbnail": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
-                    "mode": "direct"
-                }
-
-                # Guardar en DB
-                db = db_read()
-                db[vid] = rec
-                db_write(db)
-                print(f"[YT-DLP] Éxito en intento {i+1}")
-                return rec
-
-        except Exception as e:
-            last_error = e
-            print(f"[YT-DLP] Fallo intento {i+1}: {e}")
-            if "Sign in to confirm" in str(e):
-                report_bot_detection()  # Reportar detección de bot
-                if i < len(fallback_configs) - 1:
-                    print(f"[YT-DLP] Bot detection detected, trying fallback {i+2}")
-                    continue
-            elif i == len(fallback_configs) - 1:
-                break
-
-    print(f"[YT-DLP] Todos los intentos fallaron. Intentando extractor alternativo...")
-
-    # Último intento con extractor alternativo
-    alternative_result = _try_alternative_extractor(url_or_id)
-    if alternative_result:
-        print(f"[ALTERNATIVE] Éxito con extractor alternativo para {url_or_id}")
-        return alternative_result
-
-    print(f"[YT-DLP] Todos los extractores fallaron. Último error: {last_error}")
-    raise last_error
+    db = db_read()
+    db[url_or_id] = rec
+    db_write(db)
+    raise Exception(error_msg)
 
 def _download_yt_to_mp3(url_or_id: str) -> Dict[str, Any]:
     """Descarga MP3 a disco (modo 'download')"""
@@ -348,21 +321,9 @@ def _download_yt_to_mp3(url_or_id: str) -> Dict[str, Any]:
             {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}
         ],
     }
-    with YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url_or_id, download=True)
-        vid = info.get("id")
-        title = info.get("title")
-        duration = int(info.get("duration") or 0)
-        filename = f"{vid}.mp3"
-        rec = {
-            "id": vid,
-            "title": title,
-            "seconds": duration,
-            "filename": filename,
-            "mode": "download"
-        }
-        db = db_read(); db[vid] = rec; db_write(db)
-        return rec
+    # DEPRECATED: Reemplazado por pytubefix - modo download no implementado aún
+    raise Exception("Modo download no implementado con pytubefix")
+    # DEPRECATED: Código comentado - usar pytubefix
 
 async def ensure_track(url_or_id: str) -> Dict[str, Any]:
     """Obtiene track según el modo configurado"""
@@ -409,7 +370,7 @@ async def ensure_track(url_or_id: str) -> Dict[str, Any]:
 
     # Procesar en background sin bloquear
     if STREAMING_MODE == "direct":
-        asyncio.create_task(asyncio.to_thread(_get_yt_stream_info, url_or_id))
+        asyncio.create_task(asyncio.to_thread(_get_yt_stream_info_pytubefix, url_or_id))
     else:
         asyncio.create_task(asyncio.to_thread(_download_yt_to_mp3, url_or_id))
 
@@ -792,7 +753,7 @@ async def api_search(q: str, maxResults: int = 30):
     if not q:
         return JSONResponse({"error": "Query parameter 'q' is required"}, status_code=400)
 
-    results = await search_youtube_async(q, maxResults)
+    results = await search_youtube_pytubefix_async(q, maxResults)
     return {
         "items": results,
         "pageInfo": {

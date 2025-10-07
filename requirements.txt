@@ -1,7 +1,7 @@
 fastapi>=0.110,<1.0
 uvicorn[standard]>=0.27
 pydantic>=2.6,<3.0
-yt-dlp>=2024.4.9
+pytubefix>=10.0.0
 ffmpeg-python>=0.2.0
 bcrypt>=4.1.0
 python-multipart>=0.0.6

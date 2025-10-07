@@ -6,6 +6,13 @@
   <title>Music Player - Spotify Style</title>
   <link href="https://fonts.googleapis.com/css2?family=Circular+Std:wght@400;500;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+  <!-- YouTube Player API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <!-- YouTube-DL.js para fallback (solo en navegadores que lo soporten) -->
+  <script>
+    // Detectar si podemos usar youtube-dl (navegadores modernos)
+    window.supportsYoutubeDL = typeof Worker !== 'undefined' && typeof WebAssembly !== 'undefined';
+  </script>
   <style>
     :root {
       --spotify-green: #1db954;
@@ -1580,7 +1587,12 @@
         <div v-else style="width: 3.5rem; height: 3.5rem; background-color: var(--spotify-hover); border-radius: 0.375rem;"></div>
 
         <div class="current-track-info">
-          <div class="current-track-title">{{ state.current ? state.current.title : '—' }}</div>
+          <div class="current-track-title">
+            {{ state.current ? state.current.title : '—' }}
+            <span v-if="state.current" style="font-size: 0.7rem; margin-left: 0.5rem; opacity: 0.7;">
+              {{ isUsingYouTubePlayer ? '📺' : (hasAdBlocker ? '🚫📺' : '🎵') }}
+            </span>
+          </div>
           <div class="current-track-time">{{ state.positionLabel }} / {{ state.durationLabel }}</div>
           <!-- Barra de progreso interactiva -->
           <div v-if="state.current && state.duration > 0"
@@ -1771,6 +1783,25 @@
       </div>
     </div>
 
+    <!-- YouTube Player (oculto) -->
+    <div id="youtube-player-container" style="position: absolute; top: -9999px; left: -9999px; width: 1px; height: 1px; overflow: hidden;">
+      <div id="youtube-player"></div>
+    </div>
+
+    <!-- Audio element para fallback -->
+    <audio
+      ref="audioPlayer"
+      @timeupdate="onAudioTimeUpdate"
+      @ended="onAudioEnded"
+      @loadedmetadata="onAudioLoaded"
+      @error="onAudioError"
+      preload="none"
+      style="display: none;">
+    </audio>
+
+    <!-- Elemento audio original para compatibilidad -->
+    <audio id="audio" controls style="display: none;"></audio>
+
     <!-- Spotify-style notification -->
     <div ref="notification" class="spotify-notification">
       {{ notificationMessage }}
@@ -1813,6 +1844,14 @@ new Vue({
     newRoomPassword: '',
     roomName: 'Default Room',
     sessionToken: localStorage.getItem('sessionToken') || null,
+
+    // Hybrid Player System
+    playerMode: 'hybrid', // 'youtube', 'audio', 'hybrid'
+    youtubePlayer: null,
+    youtubePlayerReady: false,
+    currentAudioUrl: null,
+    isUsingYouTubePlayer: false,
+    hasAdBlocker: false,
 
     // Search properties
     searchQuery: '',
@@ -1883,6 +1922,183 @@ new Vue({
     // Navigation
     setCurrentPage(page) {
       this.currentPage = page;
+    },
+
+    // === HYBRID PLAYER SYSTEM ===
+
+    // Inicializar YouTube Player
+    initYouTubePlayer() {
+      if (typeof YT !== 'undefined' && YT.Player) {
+        this.youtubePlayer = new YT.Player('youtube-player', {
+          height: '1',
+          width: '1',
+          playerVars: {
+            autoplay: 0,
+            controls: 0,
+            disablekb: 1,
+            fs: 0,
+            iv_load_policy: 3,
+            modestbranding: 1,
+            playsinline: 1,
+            rel: 0,
+            showinfo: 0
+          },
+          events: {
+            onReady: this.onYouTubePlayerReady,
+            onStateChange: this.onYouTubePlayerStateChange,
+            onError: this.onYouTubePlayerError
+          }
+        });
+      }
+    },
+
+    // Detectar bloqueador de anuncios
+    async detectAdBlocker() {
+      try {
+        // Crear un elemento que los bloqueadores de anuncios típicamente bloquean
+        const testAd = document.createElement('div');
+        testAd.innerHTML = '&nbsp;';
+        testAd.className = 'adsbox';
+        testAd.style.position = 'absolute';
+        testAd.style.left = '-10000px';
+        document.body.appendChild(testAd);
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        this.hasAdBlocker = testAd.offsetHeight === 0;
+        document.body.removeChild(testAd);
+
+        console.log(`Ad blocker detected: ${this.hasAdBlocker}`);
+      } catch (e) {
+        console.warn('Could not detect ad blocker:', e);
+      }
+    },
+
+    // Reproducir usando el sistema híbrido
+    async playHybrid(videoId) {
+      console.log(`Playing ${videoId} in hybrid mode`);
+
+      // Priorizar YouTube Player si está disponible
+      if (this.youtubePlayerReady && this.youtubePlayer) {
+        try {
+          this.isUsingYouTubePlayer = true;
+          this.youtubePlayer.loadVideoById(videoId);
+          this.youtubePlayer.playVideo();
+          console.log(`Using YouTube Player for ${videoId}`);
+          return true;
+        } catch (e) {
+          console.warn('YouTube Player failed, falling back to audio:', e);
+        }
+      }
+
+      // Fallback: intentar obtener URL directa del servidor
+      try {
+        this.isUsingYouTubePlayer = false;
+        const response = await fetch(`/stream/${videoId}`, { method: 'HEAD' });
+
+        if (response.ok) {
+          this.currentAudioUrl = `/stream/${videoId}`;
+          this.$refs.audioPlayer.src = this.currentAudioUrl;
+          await this.$refs.audioPlayer.play();
+          console.log(`Using direct audio stream for ${videoId}`);
+          return true;
+        }
+      } catch (e) {
+        console.warn('Direct stream failed:', e);
+      }
+
+      console.error(`All playback methods failed for ${videoId}`);
+      return false;
+    },
+
+    // Pausar/reanudar
+    togglePlayPause() {
+      if (this.isUsingYouTubePlayer && this.youtubePlayer) {
+        const state = this.youtubePlayer.getPlayerState();
+        if (state === YT.PlayerState.PLAYING) {
+          this.youtubePlayer.pauseVideo();
+        } else {
+          this.youtubePlayer.playVideo();
+        }
+      } else if (this.$refs.audioPlayer) {
+        if (this.$refs.audioPlayer.paused) {
+          this.$refs.audioPlayer.play();
+        } else {
+          this.$refs.audioPlayer.pause();
+        }
+      }
+    },
+
+    // Buscar posición
+    seekTo(seconds) {
+      if (this.isUsingYouTubePlayer && this.youtubePlayer) {
+        this.youtubePlayer.seekTo(seconds, true);
+      } else if (this.$refs.audioPlayer) {
+        this.$refs.audioPlayer.currentTime = seconds;
+      }
+    },
+
+    // Callbacks de YouTube Player
+    onYouTubePlayerReady(event) {
+      console.log('YouTube Player ready');
+      this.youtubePlayerReady = true;
+    },
+
+    onYouTubePlayerStateChange(event) {
+      const state = event.data;
+      console.log('YouTube Player state changed:', state);
+
+      // Actualizar estado local basado en YouTube Player
+      if (state === YT.PlayerState.PLAYING) {
+        this.state.playing = true;
+      } else if (state === YT.PlayerState.PAUSED || state === YT.PlayerState.ENDED) {
+        this.state.playing = false;
+      }
+
+      if (state === YT.PlayerState.ENDED) {
+        this.onTrackEnded();
+      }
+    },
+
+    onYouTubePlayerError(event) {
+      console.error('YouTube Player error:', event.data);
+      // Fallback automático a audio stream
+      if (this.state.current && this.state.current.id) {
+        console.log('Attempting fallback to audio stream...');
+        this.playHybrid(this.state.current.id);
+      }
+    },
+
+    // Callbacks de Audio Element
+    onAudioTimeUpdate() {
+      if (!this.isUsingYouTubePlayer) {
+        this.state.position = this.$refs.audioPlayer.currentTime;
+        this.state.positionLabel = this.mmss(this.state.position);
+      }
+    },
+
+    onAudioEnded() {
+      if (!this.isUsingYouTubePlayer) {
+        this.onTrackEnded();
+      }
+    },
+
+    onAudioLoaded() {
+      if (!this.isUsingYouTubePlayer) {
+        this.state.duration = this.$refs.audioPlayer.duration;
+        this.state.durationLabel = this.mmss(this.state.duration);
+      }
+    },
+
+    onAudioError(e) {
+      console.error('Audio playback error:', e);
+      this.showNotification('Error al reproducir el audio', 'error');
+    },
+
+    // Cuando termina una canción
+    onTrackEnded() {
+      console.log('Track ended, playing next...');
+      this.sendCommand('player:next');
     },
 
     // Rooms management
@@ -2112,11 +2328,20 @@ new Vue({
       this.ws.onmessage = (ev) => {
         const {type, data} = JSON.parse(ev.data);
         if (type === 'state') {
+          const oldCurrentId = this.state.current ? this.state.current.id : null;
           this.state = Object.assign(this.state, data);
           this.queue = data.queue || [];
           // Actualizar nombre de room si viene del servidor
           if (data.room_name) this.roomName = data.room_name;
-          this.syncAudio();
+
+          // Si cambió la canción actual, usar el player híbrido
+          const newCurrentId = this.state.current ? this.state.current.id : null;
+          if (newCurrentId && newCurrentId !== oldCurrentId && this.state.playing) {
+            console.log('New track detected, playing with hybrid player:', newCurrentId);
+            this.playHybrid(newCurrentId);
+          } else {
+            this.syncAudio();
+          }
         } else if (type === 'queue:update') {
           this.queue = data || [];
           this.markQueueReadiness();
@@ -2124,6 +2349,12 @@ new Vue({
           this.state.position = data.position;
           this.state.positionLabel = data.positionLabel;
           this.syncAudio();
+        } else if (type === 'player:next') {
+          // Nueva canción iniciada desde el servidor
+          if (data.current && data.current.id) {
+            console.log('Server started new track:', data.current.id);
+            this.playHybrid(data.current.id);
+          }
         } else if (type === 'room_not_found') {
           console.warn('Room no encontrado, redirigiendo a default');
           this._isRedirecting = true;
@@ -2157,6 +2388,42 @@ new Vue({
     },
 
     wsSend(type, data) {
+      // Interceptar comandos de reproducción para usar el player híbrido
+      if (type === 'player:play' && this.state.current) {
+        this.playHybrid(this.state.current.id);
+        // También enviar al servidor para sincronización
+        if (this.ws && this.ws.readyState === 1) {
+          this.ws.send(JSON.stringify({type, ...data}));
+        }
+        return;
+      }
+
+      if (type === 'player:pause') {
+        this.togglePlayPause();
+        // También enviar al servidor para sincronización
+        if (this.ws && this.ws.readyState === 1) {
+          this.ws.send(JSON.stringify({type, ...data}));
+        }
+        return;
+      }
+
+      if (type === 'player:seek') {
+        this.seekTo(data.at);
+        // También enviar al servidor para sincronización
+        if (this.ws && this.ws.readyState === 1) {
+          this.ws.send(JSON.stringify({type, ...data}));
+        }
+        return;
+      }
+
+      // Para otros comandos, enviar normalmente
+      if (this.ws && this.ws.readyState === 1) {
+        this.ws.send(JSON.stringify({type, ...data}));
+      }
+    },
+
+    // Método separado para comandos que solo van al servidor
+    sendCommand(type, data = {}) {
       if (this.ws && this.ws.readyState === 1) {
         this.ws.send(JSON.stringify({type, ...data}));
       }
@@ -3090,6 +3357,21 @@ new Vue({
 
     // Load playlist volume settings
     this.loadPlaylistVolume();
+
+    // Initialize Hybrid Player System
+    this.$nextTick(() => {
+      this.detectAdBlocker();
+
+      // Initialize YouTube Player when API is ready
+      if (typeof YT !== 'undefined' && YT.Player) {
+        this.initYouTubePlayer();
+      } else {
+        // Wait for YouTube API to load
+        window.onYouTubeIframeAPIReady = () => {
+          this.initYouTubePlayer();
+        };
+      }
+    });
 
     // Setup audio element
     const audio = document.getElementById('audio');

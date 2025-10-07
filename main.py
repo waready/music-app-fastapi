@@ -1,4 +1,4 @@
-import os, json, asyncio, time, math
+import os, json, asyncio, time, math, random
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Body
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse, FileResponse, RedirectResponse
@@ -51,6 +51,75 @@ def users_write(users: Dict[str, Any]): save_json(USERS_FILE, users)
 def sessions_read() -> Dict[str, Any]: return load_json(SESSIONS_FILE, {})
 def sessions_write(sessions: Dict[str, Any]): save_json(SESSIONS_FILE, sessions)
 
+# ---- Anti-bot helpers ----
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
+]
+
+last_request_time = 0
+bot_detection_count = 0
+last_bot_detection = 0
+
+def get_random_user_agent():
+    return random.choice(USER_AGENTS)
+
+def is_bot_detection_active():
+    """Verifica si estamos en un período de enfriamiento por detección de bot"""
+    global bot_detection_count, last_bot_detection
+    current_time = time.time()
+
+    # Si hemos tenido muchas detecciones recientes, pausar
+    if bot_detection_count >= 3 and current_time - last_bot_detection < 3600:  # 1 hora
+        return True
+
+    # Reset counter después de 2 horas sin detecciones
+    if current_time - last_bot_detection > 7200:  # 2 horas
+        bot_detection_count = 0
+
+    return False
+
+def report_bot_detection():
+    """Reporta una detección de bot y actualiza contadores"""
+    global bot_detection_count, last_bot_detection
+    bot_detection_count += 1
+    last_bot_detection = time.time()
+    print(f"[BOT-DETECTION] Conteo: {bot_detection_count}, pausando solicitudes...")
+
+async def adaptive_delay():
+    """Implementa un delay adaptativo entre solicitudes"""
+    global last_request_time
+
+    # Verificar si estamos en período de enfriamiento
+    if is_bot_detection_active():
+        print("[BOT-DETECTION] En período de enfriamiento, rechazando solicitud")
+        raise Exception("Servicio temporalmente no disponible debido a limitaciones de YouTube")
+
+    current_time = time.time()
+    time_since_last = current_time - last_request_time
+
+    # Delay más largo si hemos tenido detecciones recientes
+    base_delay = 5 if bot_detection_count > 0 else 2
+    min_delay = random.uniform(base_delay, base_delay + 3)
+
+    if time_since_last < min_delay:
+        delay = min_delay - time_since_last
+        print(f"[DELAY] Esperando {delay:.2f}s antes de la siguiente solicitud")
+        await asyncio.sleep(delay)
+
+    last_request_time = time.time()
+
+def _refresh_track_background(url_or_id: str):
+    """Refresca un track en background sin bloquear"""
+    try:
+        _get_yt_stream_info(url_or_id)
+        print(f"[BACKGROUND] Refresh exitoso para {url_or_id}")
+    except Exception as e:
+        print(f"[BACKGROUND] Error refrescando {url_or_id}: {e}")
+
 # ---- Búsqueda en YouTube ----
 def _search_youtube(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
     """Buscar videos en YouTube usando yt-dlp"""
@@ -59,6 +128,15 @@ def _search_youtube(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
         'no_warnings': True,
         'extract_flat': True,
         'default_search': 'ytsearch',
+        'user_agent': get_random_user_agent(),
+        'referer': "https://www.youtube.com/",
+        'socket_timeout': 30,
+        'retries': 2,
+        'http_headers': {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-us,en;q=0.5",
+            "Sec-Fetch-Mode": "navigate",
+        }
     }
 
     try:
@@ -123,37 +201,79 @@ def _get_yt_stream_info(url_or_id: str) -> Dict[str, Any]:
         # Opciones para mejorar estabilidad
         "socket_timeout": 30,
         "retries": 3,
+        # Opciones para evitar detección de bot
+        "cookiefile": None,
+        "extract_flat": False,
+        "writesubtitles": False,
+        "writeautomaticsub": False,
+        "writeinfojson": False,
+        "user_agent": get_random_user_agent(),
+        "referer": "https://www.youtube.com/",
+        "sleep_interval_requests": 1,
+        "sleep_interval_subtitles": 1,
+        "sleep_interval": 1,
+        # Headers adicionales para parecer más humano
+        "http_headers": {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-us,en;q=0.5",
+            "Sec-Fetch-Mode": "navigate",
+        }
     }
 
-    try:
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url_or_id, download=False)  # NO descarga
+    # Intentar múltiples configuraciones para evitar bloqueos
+    fallback_configs = [
+        ydl_opts,  # Configuración principal
+        {**ydl_opts, "format": "worst/bestaudio", "source_address": "0.0.0.0"},  # Fallback 1
+        {**ydl_opts, "format": "18/worst", "extractor_retries": 1},  # Fallback 2
+    ]
 
-            vid = info.get("id")
-            title = info.get("title")
-            duration = int(info.get("duration") or 0)
+    last_error = None
+    for i, config in enumerate(fallback_configs):
+        try:
+            print(f"[YT-DLP] Intento {i+1}/3 para {url_or_id}")
+            with YoutubeDL(config) as ydl:
+                info = ydl.extract_info(url_or_id, download=False)
 
-            # URL directa del stream de audio (la magia está aquí)
-            stream_url = info.get("url")
+                vid = info.get("id")
+                title = info.get("title")
+                duration = int(info.get("duration") or 0)
 
-            rec = {
-                "id": vid,
-                "title": title,
-                "seconds": duration,
-                "stream_url": stream_url,
-                "timestamp": time.time(),
-                "thumbnail": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
-                "mode": "direct"
-            }
+                # URL directa del stream de audio
+                stream_url = info.get("url")
 
-            # Guardar en DB
-            db = db_read()
-            db[vid] = rec
-            db_write(db)
-            return rec
-    except Exception as e:
-        print(f"Error obteniendo stream info: {e}")
-        raise
+                if not stream_url:
+                    raise Exception("No se pudo obtener URL de stream")
+
+                rec = {
+                    "id": vid,
+                    "title": title,
+                    "seconds": duration,
+                    "stream_url": stream_url,
+                    "timestamp": time.time(),
+                    "thumbnail": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
+                    "mode": "direct"
+                }
+
+                # Guardar en DB
+                db = db_read()
+                db[vid] = rec
+                db_write(db)
+                print(f"[YT-DLP] Éxito en intento {i+1}")
+                return rec
+
+        except Exception as e:
+            last_error = e
+            print(f"[YT-DLP] Fallo intento {i+1}: {e}")
+            if "Sign in to confirm" in str(e):
+                report_bot_detection()  # Reportar detección de bot
+                if i < len(fallback_configs) - 1:
+                    print(f"[YT-DLP] Bot detection detected, trying fallback {i+2}")
+                    continue
+            elif i == len(fallback_configs) - 1:
+                break
+
+    print(f"[YT-DLP] Todos los intentos fallaron. Último error: {last_error}")
+    raise last_error
 
 def _download_yt_to_mp3(url_or_id: str) -> Dict[str, Any]:
     """Descarga MP3 a disco (modo 'download')"""
@@ -190,6 +310,9 @@ def _download_yt_to_mp3(url_or_id: str) -> Dict[str, Any]:
 
 async def ensure_track(url_or_id: str) -> Dict[str, Any]:
     """Obtiene track según el modo configurado"""
+    # Aplicar delay adaptativo antes de procesar
+    await adaptive_delay()
+
     db = db_read()
 
     # Si ya existe en DB, retornar inmediatamente
@@ -200,8 +323,9 @@ async def ensure_track(url_or_id: str) -> Dict[str, Any]:
             timestamp = cached.get("timestamp", 0)
             if time.time() - timestamp < 18000:  # 5 horas
                 return cached
-            # Si expiró, refrescar en background
-            asyncio.create_task(asyncio.to_thread(_get_yt_stream_info, url_or_id))
+            # Si expiró, refrescar en background pero devolver el cache actual
+            print(f"[CACHE] URL expirada para {url_or_id}, refrescando en background")
+            asyncio.create_task(asyncio.to_thread(_refresh_track_background, url_or_id))
         return cached
 
     # Extraer video ID de URL si es necesario
@@ -576,11 +700,16 @@ async def stream(request: Request, track_id: str):
         if not stream_url or time.time() - timestamp > 18000:
             try:
                 print(f"Refrescando URL expirada para {track_id}")
+                await adaptive_delay()  # Aplicar delay antes de refrescar
                 track = await asyncio.to_thread(_get_yt_stream_info, track_id)
                 stream_url = track.get("stream_url")
             except Exception as e:
                 print(f"Error refrescando stream: {e}")
-                return JSONResponse({"error": "No se pudo obtener stream de YouTube"}, status_code=500)
+                # Si falla, intentar usar la URL expirada por si aún funciona
+                if stream_url:
+                    print(f"Intentando con URL posiblemente expirada...")
+                else:
+                    return JSONResponse({"error": "No se pudo obtener stream de YouTube. Intenta más tarde."}, status_code=503)
 
         # Proxy con soporte completo para Range requests
         import httpx

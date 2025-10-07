@@ -134,15 +134,17 @@ async def search_youtube_async(query: str, max_results: int = 20) -> List[Dict[s
     return await asyncio.to_thread(_search_youtube_deprecated, query, max_results)
 
 def _search_youtube_pytubefix(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
-    """Buscar videos en YouTube usando pytubefix (reemplazo de yt-dlp)"""
+    """Buscar videos en YouTube usando pytubefix con PO Tokens (reemplazo de yt-dlp)"""
     try:
-        print(f"[PYTUBEFIX] Buscando: {query} (max: {max_results})")
-        s = Search(query)
+        print(f"[PYTUBEFIX] Buscando con cliente WEB: {query} (max: {max_results})")
+        # Usar cliente WEB para evitar bot detection (requiere nodejs en producción)
+        s = Search(query, client='WEB')
+        print("[PYTUBEFIX] Usando cliente WEB con PO Token automático")
 
         formatted_results = []
         count = 0
 
-        for video in s.results:
+        for video in s.videos:
             if count >= max_results:
                 break
 
@@ -243,8 +245,10 @@ def _get_yt_stream_info_pytubefix(url_or_id: str) -> Dict[str, Any]:
         video_url = f"https://www.youtube.com/watch?v={url_or_id}"
 
     try:
-        print(f"[PYTUBEFIX] Extrayendo información para {url_or_id}")
-        yt = YouTube(video_url)
+        print(f"[PYTUBEFIX] Extrayendo información con cliente WEB para {url_or_id}")
+        # Usar cliente WEB para evitar bot detection (requiere nodejs en producción)
+        yt = YouTube(video_url, client='WEB')
+        print("[PYTUBEFIX] Usando cliente WEB con PO Token automático")
 
         # Obtener metadata básica
         vid = yt.video_id

@@ -489,6 +489,77 @@
       height: 1.25rem;
     }
 
+    /* Queue item states */
+    .song-item {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .song-item.processing {
+      opacity: 0.7;
+      background: linear-gradient(90deg, rgba(29, 185, 84, 0.1) 0%, transparent 100%);
+      animation: shimmer 2s infinite;
+    }
+
+    .song-item.loading {
+      opacity: 0.6;
+      background: linear-gradient(90deg, rgba(29, 185, 84, 0.05) 0%, rgba(29, 185, 84, 0.15) 50%, rgba(29, 185, 84, 0.05) 100%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+
+    .song-item.failed {
+      opacity: 0.5;
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+
+    .track-status {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      font-size: 0.75rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.5rem;
+      font-weight: 500;
+    }
+
+    .track-status.loading {
+      background: rgba(29, 185, 84, 0.2);
+      color: var(--spotify-green);
+    }
+
+    .track-status.processing {
+      background: rgba(249, 115, 22, 0.2);
+      color: #f97316;
+    }
+
+    .track-status.ready {
+      background: rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+    }
+
+    .track-status.failed {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    .status-spinner {
+      width: 0.75rem;
+      height: 0.75rem;
+      border: 1px solid transparent;
+      border-top: 1px solid currentColor;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
     /* Current page content styles */
     .page-title {
       font-size: 2rem;
@@ -1194,7 +1265,9 @@
                 <p style="font-size: 0.875rem; margin-top: 0.5rem;">Busca música para empezar a escuchar</p>
               </div>
               <div v-else class="song-grid">
-                <div v-for="track in queue" :key="track.id" class="song-item">
+                <div v-for="track in queue" :key="track.id"
+                     class="song-item"
+                     :class="getTrackStateClass(track)">
                   <img :src="thumb(track.id)" :alt="getDisplayTitle(track)" class="song-thumbnail">
                   <div class="song-info">
                     <div class="song-title">{{ getDisplayTitle(track) }}</div>
@@ -1204,6 +1277,11 @@
                         <span class="spinner"></span> Procesando...
                       </span>
                     </div>
+                  </div>
+                  <!-- Status indicator -->
+                  <div class="track-status" :class="getTrackStatusClass(track)">
+                    <div v-if="isTrackProcessing(track)" class="status-spinner"></div>
+                    <span>{{ getTrackStatusText(track) }}</span>
                   </div>
                   <div class="song-actions">
                     <button @click="toggleLike(track.id, track.title)"
@@ -1329,7 +1407,7 @@
                     <button class="play-btn" @click="playNow(song.id.videoId)">
                       ▶ Reproducir
                     </button>
-                    <button class="queue-btn" @click="addToQueue(song.id.videoId)">
+                    <button class="queue-btn" @click="addToQueue(song.id.videoId, song)">
                       + Cola
                     </button>
                   </div>
@@ -3313,8 +3391,24 @@ new Vue({
       }
     },
 
-    async addToQueue(videoId) {
+    async addToQueue(videoId, searchResult = null) {
+      // Optimistic UI: Instantly add to queue with loading state
       this.adding.push({show: videoId});
+
+      // Add to queue optimistically with basic info from search result
+      const optimisticTrack = {
+        id: videoId,
+        title: searchResult ? searchResult.snippet.title : `YouTube Video ${videoId}`,
+        seconds: null,
+        mode: 'hybrid',
+        _optimistic: true,
+        _loading: true
+      };
+
+      // Add optimistically to queue
+      this.queue.push(optimisticTrack);
+      console.log(`[UX] Optimistically added ${videoId} to queue for instant feedback`);
+
       try {
         // Usar WebSocket para agregar a la cola del room actual
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -3327,11 +3421,20 @@ new Vue({
             urlOrId: videoId,
             hybrid: isHybridMode
           }));
+
+          // Update optimistic track to processing state
+          const optimisticIndex = this.queue.findIndex(t => t.id === videoId && t._optimistic);
+          if (optimisticIndex !== -1) {
+            this.queue[optimisticIndex]._loading = false;
+            this.queue[optimisticIndex]._processing = true;
+          }
         } else {
           throw new Error('WebSocket no conectado al room actual');
         }
         setTimeout(this.refreshQueue, 500);
       } catch(e) {
+        // Remove optimistic track on error
+        this.queue = this.queue.filter(t => !(t.id === videoId && t._optimistic));
         alert('Error agregando a la cola del room ' + this.roomName + ': ' + e.message);
         // Clear adding state on error
         this.clearAddingState(videoId);
@@ -4024,6 +4127,63 @@ new Vue({
         }
       });
       this.$forceUpdate();
+    },
+
+    // ---- UX State Functions ----
+    getTrackStateClass(track) {
+      if (track._optimistic && track._loading) return 'loading';
+      if (track._optimistic && track._processing) return 'processing';
+      if (track._failed) return 'failed';
+      return '';
+    },
+
+    getTrackStatusClass(track) {
+      if (track._optimistic && track._loading) return 'loading';
+      if (track._optimistic && track._processing) return 'processing';
+      if (track._failed) return 'failed';
+      if (track.seconds) return 'ready';
+      return 'processing';
+    },
+
+    getTrackStatusText(track) {
+      if (track._optimistic && track._loading) return 'Añadiendo...';
+      if (track._optimistic && track._processing) return 'Procesando...';
+      if (track._failed) return 'Error';
+      if (track.seconds) return 'Listo';
+      return 'Cargando...';
+    },
+
+    isTrackProcessing(track) {
+      return (track._optimistic && track._loading) ||
+             (track._optimistic && track._processing) ||
+             (!track.seconds && !track._failed);
+    },
+
+    // Update refreshQueue to handle optimistic updates
+    async refreshQueue() {
+      const before = Date.now();
+      try {
+        const resp = await fetch(`/api/rooms/${this.roomName}/queue`);
+        if (resp.ok) {
+          const newQueue = await resp.json();
+
+          // Remove optimistic tracks that are now in the real queue
+          newQueue.forEach(realTrack => {
+            const optimisticIndex = this.queue.findIndex(t => t.id === realTrack.id && t._optimistic);
+            if (optimisticIndex !== -1) {
+              this.queue.splice(optimisticIndex, 1);
+              console.log(`[UX] Removed optimistic track ${realTrack.id} - now real`);
+            }
+          });
+
+          // Update queue with real data
+          this.queue = [...this.queue.filter(t => t._optimistic), ...newQueue];
+
+          console.log(`[QUEUE] Updated. Duration: ${Date.now() - before}ms`);
+        }
+      } catch(e) {
+        console.error('[QUEUE] Error:', e);
+      }
     }
   },
 

@@ -2027,14 +2027,9 @@ new Vue({
     async playHybrid(videoId) {
       console.log(`[HYBRID] Playing ${videoId} - Mobile: ${this.isMobile}, UserInteracted: ${this.userInteracted}`);
 
-      // MÓVILES: Priorizar audio nativo
-      if (this.isMobile) {
-        console.log(`[HYBRID] Mobile mode - using native audio for ${videoId}`);
-        return await this.playMobileAudio(videoId);
-      }
-
-      // DESKTOP: Priorizar YouTube Player si está disponible
+      // PRIORIDAD 1: Intentar YouTube Player siempre (móvil y desktop)
       if (this.youtubePlayerReady && this.youtubePlayer) {
+        console.log(`[HYBRID] Using YouTube Player for ${videoId} (Mobile: ${this.isMobile})`);
         try {
           this.isUsingYouTubePlayer = true;
 
@@ -2058,7 +2053,14 @@ new Vue({
         }
       }
 
-      // Fallback universal: intentar obtener URL directa del servidor
+      // PRIORIDAD 2: Fallback para móviles - usar audio nativo solo si es necesario
+      if (this.isMobile) {
+        console.log(`[HYBRID] YouTube Player not ready on mobile, using native audio fallback for ${videoId}`);
+        return await this.playMobileAudio(videoId);
+      }
+
+      // PRIORIDAD 3: Fallback para desktop - intentar obtener URL directa del servidor
+      console.log(`[HYBRID] YouTube Player not ready on desktop, using server audio fallback for ${videoId}`);
       return await this.playServerAudio(videoId);
     },
 
@@ -3650,25 +3652,23 @@ new Vue({
       this.detectMobileDevice();
       this.setupUserInteractionHandlers();
 
-      // Solo en desktop, detectar ad blocker y configurar YouTube Player
+      // Detectar ad blocker (solo desktop)
       if (!this.isMobile) {
         console.log('[HYBRID] Desktop detected - initializing YouTube Player');
         this.detectAdBlocker();
-
-        // Initialize YouTube Player when API is ready (solo desktop)
-        if (typeof YT !== 'undefined' && YT.Player) {
-          this.initYouTubePlayer();
-        } else {
-          // Wait for YouTube API to load
-          window.onYouTubeIframeAPIReady = () => {
-            console.log('[HYBRID] YouTube API loaded, initializing player');
-            this.initYouTubePlayer();
-          };
-        }
       } else {
-        console.log('[HYBRID] Mobile device detected - using native audio strategy');
-        // En móvil, marcar como listo inmediatamente
-        this.youtubePlayerReady = false; // Asegurar que no use YouTube Player
+        console.log('[HYBRID] Mobile device detected - will also try YouTube Player for serverless mode');
+      }
+
+      // Inicializar YouTube Player en TODOS los dispositivos para modo serverless
+      if (typeof YT !== 'undefined' && YT.Player) {
+        this.initYouTubePlayer();
+      } else {
+        // Wait for YouTube API to load
+        window.onYouTubeIframeAPIReady = () => {
+          console.log('[HYBRID] YouTube API loaded, initializing player');
+          this.initYouTubePlayer();
+        };
       }
 
       // Debug: mostrar estado del sistema

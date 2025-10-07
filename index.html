@@ -1852,6 +1852,7 @@ new Vue({
     currentAudioUrl: null,
     isUsingYouTubePlayer: false,
     hasAdBlocker: false,
+    youtubePositionInterval: null,
 
     // Search properties
     searchQuery: '',
@@ -1976,18 +1977,32 @@ new Vue({
 
     // Reproducir usando el sistema híbrido
     async playHybrid(videoId) {
-      console.log(`Playing ${videoId} in hybrid mode`);
+      console.log(`[HYBRID] Playing ${videoId} in hybrid mode`);
 
       // Priorizar YouTube Player si está disponible
       if (this.youtubePlayerReady && this.youtubePlayer) {
         try {
           this.isUsingYouTubePlayer = true;
+
+          // Actualizar título inmediatamente
+          if (this.state.current && this.state.current.id === videoId) {
+            // Si ya tenemos metadata, usarla
+            console.log(`[HYBRID] Using existing metadata for ${videoId}`);
+          } else {
+            // Actualizar con título básico mientras carga
+            this.state.current = {
+              id: videoId,
+              title: 'Cargando desde YouTube...'
+            };
+          }
+
           this.youtubePlayer.loadVideoById(videoId);
           this.youtubePlayer.playVideo();
-          console.log(`Using YouTube Player for ${videoId}`);
+          console.log(`[HYBRID] Using YouTube Player for ${videoId}`);
           return true;
         } catch (e) {
-          console.warn('YouTube Player failed, falling back to audio:', e);
+          console.warn('[HYBRID] YouTube Player failed, falling back to audio:', e);
+          this.isUsingYouTubePlayer = false;
         }
       }
 
@@ -2000,14 +2015,14 @@ new Vue({
           this.currentAudioUrl = `/stream/${videoId}`;
           this.$refs.audioPlayer.src = this.currentAudioUrl;
           await this.$refs.audioPlayer.play();
-          console.log(`Using direct audio stream for ${videoId}`);
+          console.log(`[HYBRID] Using direct audio stream for ${videoId}`);
           return true;
         }
       } catch (e) {
-        console.warn('Direct stream failed:', e);
+        console.warn('[HYBRID] Direct stream failed:', e);
       }
 
-      console.error(`All playback methods failed for ${videoId}`);
+      console.error(`[HYBRID] All playback methods failed for ${videoId}`);
       return false;
     },
 
@@ -2040,23 +2055,77 @@ new Vue({
 
     // Callbacks de YouTube Player
     onYouTubePlayerReady(event) {
-      console.log('YouTube Player ready');
+      console.log('[HYBRID] YouTube Player ready');
       this.youtubePlayerReady = true;
     },
 
     onYouTubePlayerStateChange(event) {
       const state = event.data;
-      console.log('YouTube Player state changed:', state);
+      console.log('[HYBRID] YouTube Player state changed:', state);
 
       // Actualizar estado local basado en YouTube Player
       if (state === YT.PlayerState.PLAYING) {
         this.state.playing = true;
+
+        // Obtener metadata del video cuando empiece a reproducir
+        if (this.youtubePlayer && this.isUsingYouTubePlayer) {
+          try {
+            const duration = this.youtubePlayer.getDuration();
+            const videoData = this.youtubePlayer.getVideoData();
+
+            if (duration && duration > 0) {
+              this.state.duration = duration;
+              this.state.durationLabel = this.mmss(duration);
+              console.log('[HYBRID] YouTube duration detected:', duration);
+            }
+
+            // Actualizar título si tenemos data del video
+            if (videoData && videoData.title && this.state.current) {
+              this.state.current.title = videoData.title;
+              console.log('[HYBRID] YouTube title detected:', videoData.title);
+            }
+          } catch (e) {
+            console.warn('[HYBRID] Error getting YouTube metadata:', e);
+          }
+        }
+
+        // Iniciar ticker para posición
+        this.startYouTubePositionTicker();
       } else if (state === YT.PlayerState.PAUSED || state === YT.PlayerState.ENDED) {
         this.state.playing = false;
+        this.stopYouTubePositionTicker();
       }
 
       if (state === YT.PlayerState.ENDED) {
         this.onTrackEnded();
+      }
+    },
+
+    // Ticker para posición de YouTube Player
+    startYouTubePositionTicker() {
+      if (this.youtubePositionInterval) {
+        clearInterval(this.youtubePositionInterval);
+      }
+
+      this.youtubePositionInterval = setInterval(() => {
+        if (this.isUsingYouTubePlayer && this.youtubePlayer && this.state.playing) {
+          try {
+            const currentTime = this.youtubePlayer.getCurrentTime();
+            if (currentTime !== undefined) {
+              this.state.position = currentTime;
+              this.state.positionLabel = this.mmss(currentTime);
+            }
+          } catch (e) {
+            console.warn('[HYBRID] Error getting YouTube position:', e);
+          }
+        }
+      }, 1000);
+    },
+
+    stopYouTubePositionTicker() {
+      if (this.youtubePositionInterval) {
+        clearInterval(this.youtubePositionInterval);
+        this.youtubePositionInterval = null;
       }
     },
 

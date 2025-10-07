@@ -155,6 +155,9 @@ def _search_youtube_with_library(query: str, max_results: int = 20) -> List[Dict
                     'thumbnails': {
                         'default': {
                             'url': thumbnail_url
+                        },
+                        'medium': {
+                            'url': thumbnail_url
                         }
                     },
                     'channelTitle': channel,

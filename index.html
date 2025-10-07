@@ -2799,10 +2799,21 @@ new Vue({
       if (!this.searchQuery.trim()) return;
       this.searching = true;
       this.currentSearchPage = 0; // Reset to first page
+
       try {
+        console.log('[SEARCH] Intentando búsqueda en servidor...');
         const response = await fetch(`/api/search?q=${encodeURIComponent(this.searchQuery)}&maxResults=30`);
         const data = await response.json();
-        this.searchResults = data.items || [];
+
+        // Si el servidor retorna resultados, usarlos
+        if (data.items && data.items.length > 0) {
+          console.log(`[SEARCH] Servidor exitoso: ${data.items.length} resultados`);
+          this.searchResults = data.items;
+        } else {
+          console.log('[SEARCH] Servidor sin resultados, intentando fallback frontend...');
+          await this.searchMusicFrontend();
+          return;
+        }
 
         // Initialize reactive properties for dropdowns
         this.searchResults.forEach(song => {
@@ -2811,10 +2822,66 @@ new Vue({
 
         this.setCurrentPage('search');
       } catch(e) {
-        alert('Error buscando: ' + e.message);
-        this.searchResults = [];
+        console.log(`[SEARCH] Servidor falló: ${e.message}, intentando fallback frontend...`);
+        await this.searchMusicFrontend();
       } finally {
         this.searching = false;
+      }
+    },
+
+    async searchMusicFrontend() {
+      console.log('[SEARCH] Usando búsqueda frontend con YouTube Data API...');
+      try {
+        // Usar búsqueda directa desde el navegador del usuario
+        // Esto evita las limitaciones de IP del servidor
+        const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(this.searchQuery)}&type=video&maxResults=30&key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8`;
+
+        const response = await fetch(searchUrl);
+        if (!response.ok) {
+          throw new Error('YouTube API falló');
+        }
+
+        const data = await response.json();
+
+        if (data.items && data.items.length > 0) {
+          // Convertir formato de YouTube Data API al formato esperado
+          this.searchResults = data.items.map(item => ({
+            id: {
+              kind: 'youtube#video',
+              videoId: item.id.videoId
+            },
+            snippet: {
+              title: item.snippet.title,
+              description: item.snippet.description,
+              thumbnails: {
+                default: { url: `https://i.ytimg.com/vi/${item.id.videoId}/default.jpg` },
+                medium: { url: `https://i.ytimg.com/vi/${item.id.videoId}/mqdefault.jpg` },
+                high: { url: `https://i.ytimg.com/vi/${item.id.videoId}/hqdefault.jpg` }
+              },
+              channelTitle: item.snippet.channelTitle
+            },
+            duration: 0, // No disponible en search API
+            url: `https://www.youtube.com/watch?v=${item.id.videoId}`
+          }));
+
+          console.log(`[SEARCH] Frontend exitoso: ${this.searchResults.length} resultados`);
+
+          // Initialize reactive properties for dropdowns
+          this.searchResults.forEach(song => {
+            this.$set(song, '_showPlaylists', false);
+          });
+
+          this.setCurrentPage('search');
+        } else {
+          console.log('[SEARCH] Frontend sin resultados');
+          this.searchResults = [];
+          alert('No se encontraron resultados para: ' + this.searchQuery);
+        }
+
+      } catch(e) {
+        console.log(`[SEARCH] Frontend también falló: ${e.message}`);
+        this.searchResults = [];
+        alert('Error en búsqueda frontend: ' + e.message);
       }
     },
 
@@ -2858,9 +2925,9 @@ new Vue({
       try {
         // Usar WebSocket para agregar a la cola del room actual
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          // Determinar si usar modo híbrido basado en si YouTube Player está disponible
-          const isHybridMode = this.youtubePlayerReady && this.youtubePlayer;
-          console.log(`[QUEUE] Adding ${videoId} with hybrid mode: ${isHybridMode}`);
+          // En modo lightweight/serverless, siempre usar modo híbrido para evitar descargas del servidor
+          const isHybridMode = true; // Arquitectura serverless - siempre usar cliente
+          console.log(`[QUEUE] Adding ${videoId} with hybrid mode: ${isHybridMode} (serverless architecture)`);
 
           this.ws.send(JSON.stringify({
             type: 'queue:add',

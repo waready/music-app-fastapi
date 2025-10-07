@@ -1836,6 +1836,9 @@ new Vue({
 
     // Registro de videos no embeddables para evitar bucles infinitos
     nonEmbeddableVideos: new Set(),
+
+    // Registro de metadata ya preservada para evitar repeticiones
+    preservedMetadata: new Map(),
     volume: Number(localStorage.getItem('vol') ?? 0.8),
     muted: localStorage.getItem('muted') === 'true',
     rate: Number(localStorage.getItem('rate') ?? 1),
@@ -2597,8 +2600,16 @@ new Vue({
               preservedTitle !== this.state.current.title &&
               preservedTitle !== 'Cargando desde YouTube...' &&
               !preservedTitle.startsWith('YouTube Video')) {
-            this.state.current.title = preservedTitle;
-            console.log('[HYBRID] Preserved real title:', preservedTitle);
+
+            const videoId = this.state.current.id;
+            const currentMeta = this.preservedMetadata.get(videoId) || {};
+
+            // Solo preservar si no hemos preservado este título antes
+            if (currentMeta.title !== preservedTitle) {
+              this.state.current.title = preservedTitle;
+              this.preservedMetadata.set(videoId, { ...currentMeta, title: preservedTitle });
+              console.log('[HYBRID] Preserved real title:', preservedTitle);
+            }
           }
 
           // Preservar duración real del YouTube Player si es mejor que el placeholder
@@ -2607,9 +2618,19 @@ new Vue({
               (this.state.duration === 180 || this.state.duration === 0) &&
               preservedDuration !== this.state.duration &&
               Math.abs(this.state.duration - preservedDuration) > 1) {
-            this.state.duration = preservedDuration;
-            this.state.durationLabel = this.mmss(preservedDuration);
-            console.log('[HYBRID] Preserved real duration:', preservedDuration);
+
+            const videoId = this.state.current ? this.state.current.id : null;
+            if (videoId) {
+              const currentMeta = this.preservedMetadata.get(videoId) || {};
+
+              // Solo preservar si no hemos preservado esta duración antes
+              if (currentMeta.duration !== preservedDuration) {
+                this.state.duration = preservedDuration;
+                this.state.durationLabel = this.mmss(preservedDuration);
+                this.preservedMetadata.set(videoId, { ...currentMeta, duration: preservedDuration });
+                console.log('[HYBRID] Preserved real duration:', preservedDuration);
+              }
+            }
           }
           // Actualizar nombre de room si viene del servidor
           if (data.room_name) this.roomName = data.room_name;

@@ -714,6 +714,11 @@ class TrackIn(BaseModel):
     urlOrId: str
     enqueue: Optional[bool] = False
 
+class TrackMetadata(BaseModel):
+    id: str
+    title: Optional[str] = None
+    seconds: Optional[int] = None
+
 @app.get("/api/tracks")
 def api_tracks():
     return list(db_read().values())
@@ -759,6 +764,37 @@ async def api_add_track(payload: TrackIn):
         room = await get_or_create_room("default")
         await room_enqueue_track(room, rec["id"])
     return rec
+
+@app.patch("/api/tracks/metadata")
+async def api_update_track_metadata(payload: TrackMetadata):
+    """Actualiza metadata de un track (título y duración) para sincronización"""
+    async with _db_lock:
+        db = db_read()
+        track = db.get(payload.id)
+
+        if not track:
+            return {"error": "Track not found", "id": payload.id}
+
+        # Actualizar solo los campos proporcionados
+        updated = False
+        if payload.title and not payload.title.startswith('YouTube Video'):
+            track["title"] = payload.title
+            updated = True
+
+        if payload.seconds and payload.seconds > 0:
+            track["seconds"] = payload.seconds
+            updated = True
+
+        if updated:
+            db_write(db)
+            print(f"[METADATA] Updated {payload.id}: title={payload.title}, seconds={payload.seconds}")
+
+            # Broadcast to all rooms that have this track
+            for room_name in rooms_read().keys():
+                room = await get_or_create_room(room_name)
+                await room.broadcast_state()
+
+        return {"success": updated, "id": payload.id}
 
 @app.get("/api/queue")
 async def api_queue():

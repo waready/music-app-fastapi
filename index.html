@@ -2234,15 +2234,45 @@ new Vue({
             const videoData = this.youtubePlayer.getVideoData();
 
             if (duration && duration > 0) {
-              this.state.duration = duration;
-              this.state.durationLabel = this.mmss(duration);
-              console.log('[HYBRID] YouTube duration detected:', duration);
+              // Solo actualizar si la duración ha cambiado significativamente
+              if (Math.abs(this.state.duration - duration) > 1) {
+                this.state.duration = duration;
+                this.state.durationLabel = this.mmss(duration);
+                console.log('[HYBRID] YouTube duration detected:', duration);
+
+                // Actualizar también en la cola si existe
+                const videoId = this.state.current ? this.state.current.id : null;
+                if (videoId) {
+                  const queueTrack = this.queue.find(t => t.id === videoId);
+                  if (queueTrack && Math.abs((queueTrack.seconds || 0) - duration) > 1) {
+                    queueTrack.seconds = duration;
+                  }
+                }
+              }
             }
 
             // Actualizar título si tenemos data del video
             if (videoData && videoData.title && this.state.current) {
-              this.state.current.title = videoData.title;
-              console.log('[HYBRID] YouTube title detected:', videoData.title);
+              const newTitle = videoData.title;
+              const videoId = this.state.current.id;
+
+              // Solo actualizar si el título ha cambiado
+              if (this.state.current.title !== newTitle) {
+                this.state.current.title = newTitle;
+                console.log('[HYBRID] YouTube title detected:', newTitle);
+
+                // Actualizar también en la cola si existe
+                const queueTrack = this.queue.find(t => t.id === videoId);
+                if (queueTrack && queueTrack.title !== newTitle) {
+                  queueTrack.title = newTitle;
+                }
+
+                // Forzar actualización de la UI
+                this.$forceUpdate();
+
+                // Sincronizar con el servidor (opcional, para otros usuarios)
+                this.updateTrackMetadata(videoId, newTitle, duration);
+              }
             }
           } catch (e) {
             console.warn('[HYBRID] Error getting YouTube metadata:', e);
@@ -2918,6 +2948,32 @@ new Vue({
 
       await Promise.allSettled(tasks);
       this.$forceUpdate();
+    },
+
+    // Update track metadata on server for synchronization
+    async updateTrackMetadata(videoId, title, duration) {
+      try {
+        // Solo actualizar si tenemos datos válidos
+        if (!videoId || (!title && !duration)) return;
+
+        const payload = { id: videoId };
+        if (title && !title.startsWith('YouTube Video')) {
+          payload.title = title;
+        }
+        if (duration && duration > 0) {
+          payload.seconds = Math.round(duration);
+        }
+
+        await fetch('/api/tracks/metadata', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        console.log('[HYBRID] Updated server metadata for', videoId);
+      } catch (e) {
+        console.warn('[HYBRID] Failed to update server metadata:', e);
+      }
     },
 
     // Search methods

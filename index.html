@@ -1944,7 +1944,12 @@ new Vue({
 
     // Inicializar YouTube Player
     initYouTubePlayer() {
+      console.log(`[HYBRID] Initializing YouTube Player - Mobile: ${this.isMobile}, YT available: ${typeof YT !== 'undefined'}`);
+
       if (typeof YT !== 'undefined' && YT.Player) {
+        const playerElement = document.getElementById('youtube-player');
+        console.log(`[HYBRID] Player element found: ${playerElement !== null}`);
+
         this.youtubePlayer = new YT.Player('youtube-player', {
           height: '1',
           width: '1',
@@ -2174,7 +2179,7 @@ new Vue({
 
     // Callbacks de YouTube Player
     onYouTubePlayerReady(event) {
-      console.log('[HYBRID] YouTube Player ready');
+      console.log(`[HYBRID] YouTube Player ready - Mobile: ${this.isMobile}`);
       this.youtubePlayerReady = true;
     },
 

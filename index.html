@@ -3715,6 +3715,11 @@ new Vue({
 
     // Handle streaming errors (URLs expiradas, CORS, etc)
     audio.addEventListener('error', async (e) => {
+      // Si estamos usando YouTube Player, ignorar errores del audio element
+      if (this.isUsingYouTubePlayer) {
+        return;
+      }
+
       console.error('Error en audio stream:', e);
       if (this.state.current) {
         // Evitar bucle infinito: no reintentar si está en "Procesando..."
@@ -3730,7 +3735,8 @@ new Vue({
 
         if (this._audioRetries[currentId] > 3) {
           console.error('Demasiados reintentos para', currentId);
-          this.pause();
+          // Pausar el audio element, no el componente
+          audio.pause();
           delete this._audioRetries[currentId];
           return;
         }

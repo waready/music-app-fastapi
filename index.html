@@ -1833,6 +1833,9 @@ new Vue({
     connected: false,
     state: { current: null, position: 0, positionLabel: '0:00', duration: 0, durationLabel: '0:00', playing: false },
     queue: [],
+
+    // Registro de videos no embeddables para evitar bucles infinitos
+    nonEmbeddableVideos: new Set(),
     volume: Number(localStorage.getItem('vol') ?? 0.8),
     muted: localStorage.getItem('muted') === 'true',
     rate: Number(localStorage.getItem('rate') ?? 1),
@@ -2055,6 +2058,17 @@ new Vue({
     async playHybrid(videoId) {
       console.log(`[HYBRID] Playing ${videoId} - Mobile: ${this.isMobile}, UserInteracted: ${this.userInteracted}`);
 
+      // Verificar si este video ya falló con error 150 (no embeddable)
+      if (this.nonEmbeddableVideos.has(videoId)) {
+        console.log(`[HYBRID] Video ${videoId} is known to be non-embeddable, skipping YouTube Player`);
+        // Ir directamente al fallback de audio
+        if (this.isMobile) {
+          return await this.playMobileAudio(videoId);
+        } else {
+          return await this.playServerAudio(videoId);
+        }
+      }
+
       // PRIORIDAD 1: Intentar YouTube Player siempre (móvil y desktop)
       if (this.youtubePlayerReady && this.youtubePlayer) {
         console.log(`[HYBRID] Using YouTube Player for ${videoId} (Mobile: ${this.isMobile})`);
@@ -2274,10 +2288,36 @@ new Vue({
 
     onYouTubePlayerError(event) {
       console.error('YouTube Player error:', event.data);
-      // Fallback automático a audio stream
+
       if (this.state.current && this.state.current.id) {
-        console.log('Attempting fallback to audio stream...');
-        this.playHybrid(this.state.current.id);
+        const videoId = this.state.current.id;
+
+        // Error 150: Video no disponible para reproducción embebida
+        if (event.data === 150) {
+          console.log(`[HYBRID] Video ${videoId} is not embeddable (error 150), marking as non-embeddable`);
+          this.nonEmbeddableVideos.add(videoId);
+          this.isUsingYouTubePlayer = false;
+
+          // Usar fallback apropiado basado en el dispositivo
+          if (this.isMobile) {
+            this.playMobileAudio(videoId);
+          } else {
+            this.playServerAudio(videoId);
+          }
+          return;
+        }
+
+        // Para otros errores, intentar fallback pero evitar bucle infinito
+        if (!this.nonEmbeddableVideos.has(videoId)) {
+          console.log('Attempting fallback to audio stream...');
+          this.isUsingYouTubePlayer = false;
+
+          if (this.isMobile) {
+            this.playMobileAudio(videoId);
+          } else {
+            this.playServerAudio(videoId);
+          }
+        }
       }
     },
 

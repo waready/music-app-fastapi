@@ -1908,6 +1908,10 @@ new Vue({
 
   computed: {
     audioSrc() {
+      // Si estamos usando YouTube Player, no usar audio element del servidor
+      if (this.isUsingYouTubePlayer) {
+        return '';
+      }
       return this.state.current ? `/stream/${this.state.current.id}` : '';
     },
 

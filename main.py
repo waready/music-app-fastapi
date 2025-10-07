@@ -1224,14 +1224,39 @@ async def ws_room_endpoint(ws: WebSocket, room_id: str):
                     continue
                 try:
                     if hybrid_mode:
-                        # Modo híbrido: agregar directamente sin procesar con yt-dlp
-                        print(f"[HYBRID] Agregando track {url_or_id} en modo híbrido (sin yt-dlp)")
-                        # Crear record básico para la base de datos sin procesar
+                        # Modo híbrido: obtener metadata básica sin descargar
+                        print(f"[HYBRID] Agregando track {url_or_id} en modo híbrido (solo metadata)")
+
+                        try:
+                            # Usar youtube-dl para obtener solo metadata (sin descargar)
+                            video_url = url_or_id if url_or_id.startswith('http') else f"https://www.youtube.com/watch?v={url_or_id}"
+
+                            ydl_opts = {
+                                'quiet': True,
+                                'no_warnings': True,
+                                'skip_download': True,  # Solo metadata, no descargar
+                                'extract_flat': False,  # Extraer metadata completa
+                            }
+
+                            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                                info = ydl.extract_info(video_url, download=False)
+                                title = info.get('title', f'YouTube Video {url_or_id}')
+                                duration = info.get('duration', 180)  # 3 min default
+
+                            print(f"[HYBRID] Metadata obtenida: {title} ({duration}s)")
+                        except Exception as e:
+                            print(f"[HYBRID] Error obteniendo metadata: {e}, usando placeholder")
+                            title = f"YouTube Video {url_or_id}"
+                            duration = 180
+
+                        # Crear record híbrido
                         rec = {
                             "id": url_or_id,
-                            "title": f"YouTube Video {url_or_id}",  # Título placeholder
+                            "title": title,
+                            "seconds": duration,
                             "mode": "hybrid",
-                            "timestamp": time.time()
+                            "timestamp": time.time(),
+                            "thumbnail": f"https://i.ytimg.com/vi/{url_or_id}/hqdefault.jpg"
                         }
                         # Guardar en base de datos
                         db = db_read()

@@ -951,31 +951,43 @@ async def api_get_metadata(video_id: str):
         video_url = f"https://www.youtube.com/watch?v={video_id}"
 
         # Definir fallback de clientes según documentación yt-dlp (orden de confiabilidad)
+        # Incluye configuraciones especiales para servidores de producción
         client_fallbacks = [
             {
                 'name': 'android',
                 'config': ['android'],
-                'description': 'Cliente Android (más confiable según docs)'
+                'description': 'Cliente Android (más confiable según docs)',
+                'user_agent': 'Mozilla/5.0 (Linux; Android 14; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36'
             },
             {
                 'name': 'ios',
                 'config': ['ios'],
-                'description': 'Cliente iOS (segunda opción)'
+                'description': 'Cliente iOS (segunda opción)',
+                'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1'
             },
             {
                 'name': 'web',
                 'config': ['web'],
-                'description': 'Cliente Web (tercera opción)'
+                'description': 'Cliente Web (tercera opción)',
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
             },
             {
                 'name': 'tv_embedded',
                 'config': ['tv_embedded'],
-                'description': 'Cliente TV embebido (última opción)'
+                'description': 'Cliente TV embebido (última opción)',
+                'user_agent': 'Mozilla/5.0 (Linux; U; Android 9; KFMAWI Build/PS7312.3138N) AppleWebKit/537.36 (KHTML, like Gecko) Silk/122.3.1 like Chrome/122.0.6261.95 Safari/537.36'
+            },
+            {
+                'name': 'android_vr',
+                'config': ['android_vr'],
+                'description': 'Cliente Android VR (configuración especial)',
+                'user_agent': 'Mozilla/5.0 (Linux; Android 12; Quest 2) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/27.0.0.22.117 SamsungBrowser/4.0 Chrome/121.0.0.0 Mobile VR Safari/537.36'
             },
             {
                 'name': 'multi',
                 'config': ['android', 'ios', 'web'],
-                'description': 'Múltiples clientes (fallback final)'
+                'description': 'Múltiples clientes (fallback final)',
+                'user_agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
             }
         ]
 
@@ -984,7 +996,7 @@ async def api_get_metadata(video_id: str):
         # Intentar cada cliente en orden de prioridad
         for attempt, client_info in enumerate(client_fallbacks, 1):
             try:
-                print(f"[YT-DLP] Intento {attempt}/5: {client_info['description']}")
+                print(f"[YT-DLP] Intento {attempt}/6: {client_info['description']}")
 
                 # Crear configuración específica para este cliente
                 current_ydl_opts = ydl_opts.copy()
@@ -997,11 +1009,33 @@ async def api_get_metadata(video_id: str):
                     }
                 }
 
-                # Para clientes web, ajustar headers a desktop
-                if client_info['name'] == 'web':
-                    current_ydl_opts['http_headers']['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+                # Aplicar User-Agent específico para cada cliente
+                current_ydl_opts['http_headers'] = current_ydl_opts['http_headers'].copy()
+                current_ydl_opts['http_headers']['User-Agent'] = client_info['user_agent']
+
+                # Ajustar headers específicos según el tipo de cliente
+                if client_info['name'] in ['web', 'multi']:
                     current_ydl_opts['http_headers']['Sec-Ch-Ua-Mobile'] = '?0'
                     current_ydl_opts['http_headers']['Sec-Ch-Ua-Platform'] = '"Windows"'
+                elif client_info['name'] == 'ios':
+                    current_ydl_opts['http_headers']['Sec-Ch-Ua-Mobile'] = '?1'
+                    current_ydl_opts['http_headers']['Sec-Ch-Ua-Platform'] = '"iOS"'
+                elif client_info['name'] in ['android', 'android_vr']:
+                    current_ydl_opts['http_headers']['Sec-Ch-Ua-Mobile'] = '?1'
+                    current_ydl_opts['http_headers']['Sec-Ch-Ua-Platform'] = '"Android"'
+                elif client_info['name'] == 'tv_embedded':
+                    # TV no incluye estos headers
+                    current_ydl_opts['http_headers'].pop('Sec-Ch-Ua-Mobile', None)
+                    current_ydl_opts['http_headers'].pop('Sec-Ch-Ua-Platform', None)
+                    current_ydl_opts['http_headers'].pop('Sec-Ch-Ua', None)
+
+                # Para clientes problemáticos, configuraciones adicionales
+                if attempt >= 4:  # TV embedded y Android VR necesitan configuración especial
+                    print(f"[YT-DLP] Usando configuración especial para cliente {client_info['name']}")
+                    current_ydl_opts['sleep_interval'] = 8  # Más lento
+                    current_ydl_opts['socket_timeout'] = 60  # Timeout más largo
+                    # Reducir agresividad para videos problemáticos
+                    current_ydl_opts['extractor_args']['youtube']['player_skip'] = ['configs']  # Solo configs, no webpage
 
                 with yt_dlp.YoutubeDL(current_ydl_opts) as ydl:
                     # Extraer solo la información del video

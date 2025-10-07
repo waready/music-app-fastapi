@@ -584,11 +584,20 @@ async def room_maybe_autostart(room: Room):
             await room_maybe_autostart(room); return
         print(f"[DEBUG] Starting track {next_id}: {meta.get('title')}")
         room.player.current_id = next_id
-        room.player.duration = float(meta.get("seconds") or 0)
+
+        # Verificar si es modo híbrido
+        if meta.get("mode") == "hybrid":
+            print(f"[HYBRID] Track {next_id} is in hybrid mode, using client-side player")
+            # Para modo híbrido, usar duración placeholder - el cliente actualizará la duración real
+            room.player.duration = 300.0  # 5 minutos placeholder
+        else:
+            # Modo tradicional con yt-dlp
+            room.player.duration = float(meta.get("seconds") or 0)
+
         room.player.paused = False
         room.player.paused_at = 0.0
         room.player.started_at = time.time()
-        print(f"[DEBUG] Player state: current_id={room.player.current_id}, paused={room.player.paused}, playing={room.player.playing()}")
+        print(f"[DEBUG] Player state: current_id={room.player.current_id}, paused={room.player.paused}, playing={room.player.playing()}, mode={meta.get('mode', 'traditional')}")
     await room.broadcast({"type":"player:next","data":{"current":{"id":meta["id"],"title":meta["title"]}}})
     await room_broadcast_state(room)
 
@@ -802,6 +811,16 @@ async def stream(request: Request, track_id: str):
 
     track = db[track_id]
     mode = track.get("mode", STREAMING_MODE)
+
+    # MODO HÍBRIDO: No procesar con servidor, usar cliente
+    if mode == "hybrid":
+        return JSONResponse({
+            "error": "Track en modo híbrido",
+            "message": "Esta canción está siendo reproducida directamente por el cliente (YouTube Player)",
+            "track_id": track_id,
+            "title": track.get("title", "YouTube Video"),
+            "mode": "hybrid"
+        }, status_code=503)
 
     # MODO NO DISPONIBLE: YouTube está bloqueando el acceso
     if mode == "unavailable":
@@ -1195,22 +1214,40 @@ async def ws_room_endpoint(ws: WebSocket, room_id: str):
 
             if t == "queue:add":
                 url_or_id = msg.get("urlOrId") or msg.get("id")
+                hybrid_mode = msg.get("hybrid", False)  # Nuevo parámetro para modo híbrido
                 if not url_or_id:
                     await ws.send_json({"type":"error","data":{"message":"urlOrId requerido"}});
                     continue
                 try:
-                    rec = await ensure_track(url_or_id)
-                    if rec.get("mode") == "unavailable":
-                        await ws.send_json({
-                            "type":"warning",
-                            "data":{
-                                "message":"Track agregado pero puede no reproducirse debido a restricciones de YouTube",
-                                "track": {"id": rec["id"], "title": rec["title"]},
-                                "action":"queue:add"
-                            }
-                        })
-                    else:
+                    if hybrid_mode:
+                        # Modo híbrido: agregar directamente sin procesar con yt-dlp
+                        print(f"[HYBRID] Agregando track {url_or_id} en modo híbrido (sin yt-dlp)")
+                        # Crear record básico para la base de datos sin procesar
+                        rec = {
+                            "id": url_or_id,
+                            "title": f"YouTube Video {url_or_id}",  # Título placeholder
+                            "mode": "hybrid",
+                            "timestamp": time.time()
+                        }
+                        # Guardar en base de datos
+                        db = db_read()
+                        db[url_or_id] = rec
+                        db_write(db)
                         await ws.send_json({"type":"ok","data":{"action":"queue:add","id":rec["id"]}})
+                    else:
+                        # Modo tradicional: procesar con yt-dlp
+                        rec = await ensure_track(url_or_id)
+                        if rec.get("mode") == "unavailable":
+                            await ws.send_json({
+                                "type":"warning",
+                                "data":{
+                                    "message":"Track agregado pero puede no reproducirse debido a restricciones de YouTube",
+                                    "track": {"id": rec["id"], "title": rec["title"]},
+                                    "action":"queue:add"
+                                }
+                            })
+                        else:
+                            await ws.send_json({"type":"ok","data":{"action":"queue:add","id":rec["id"]}})
                     await room_enqueue_track(room, rec["id"])
                 except Exception as e:
                     error_msg = str(e)

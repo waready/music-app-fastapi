@@ -2858,9 +2858,14 @@ new Vue({
       try {
         // Usar WebSocket para agregar a la cola del room actual
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          // Determinar si usar modo híbrido basado en si YouTube Player está disponible
+          const isHybridMode = this.youtubePlayerReady && this.youtubePlayer;
+          console.log(`[QUEUE] Adding ${videoId} with hybrid mode: ${isHybridMode}`);
+
           this.ws.send(JSON.stringify({
             type: 'queue:add',
-            urlOrId: videoId
+            urlOrId: videoId,
+            hybrid: isHybridMode
           }));
         } else {
           throw new Error('WebSocket no conectado al room actual');

@@ -2811,6 +2811,13 @@ new Vue({
     },
 
     async markQueueReadiness() {
+      // En modo híbrido/serverless, no verificar readiness del servidor
+      // Todos los tracks están "listos" porque usan YouTube Player
+      if (this.isUsingYouTubePlayer || this.queue.some(t => t.mode === 'hybrid' || t.mode === 'lightweight')) {
+        this.queue.forEach(t => t._ready = true);
+        return;
+      }
+
       const now = Date.now();
       const CACHE_DURATION = 30000; // 30 seconds cache
 

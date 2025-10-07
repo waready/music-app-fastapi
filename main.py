@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 # Implementación liviana sin descargas - solo gestión de colas
 import youtube_dl
+import yt_dlp
 from youtube_search import YoutubeSearch
 import bcrypt
 
@@ -795,6 +796,55 @@ async def api_update_track_metadata(payload: TrackMetadata):
                 await room.broadcast_state()
 
         return {"success": updated, "id": payload.id}
+
+@app.get("/api/metadata/{video_id}")
+async def api_get_metadata(video_id: str):
+    """Obtiene metadata de YouTube usando yt-dlp sin descargar el video"""
+    try:
+        print(f"[YT-DLP] Extracting metadata for {video_id}")
+
+        # Configurar yt-dlp para solo extraer metadata
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': False,
+            'skip_download': True,
+            'format': 'worst',  # No necesitamos formato de alta calidad
+        }
+
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # Extraer solo la información del video
+            info = ydl.extract_info(video_url, download=False)
+
+            metadata = {
+                "id": video_id,
+                "title": info.get('title', f'YouTube Video {video_id}'),
+                "duration": info.get('duration', 180),
+                "seconds": info.get('duration', 180),
+                "uploader": info.get('uploader', 'Unknown'),
+                "view_count": info.get('view_count', 0),
+                "upload_date": info.get('upload_date', None),
+                "description": info.get('description', '')[:200] + '...' if info.get('description') else '',
+                "thumbnail": info.get('thumbnail', f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg'),
+                "source": "yt-dlp"
+            }
+
+            print(f"[YT-DLP] Successfully extracted: {metadata['title']} ({metadata['duration']}s)")
+            return metadata
+
+    except Exception as e:
+        print(f"[YT-DLP] Error extracting metadata for {video_id}: {e}")
+        # Fallback en caso de error
+        return {
+            "id": video_id,
+            "title": f"YouTube Video {video_id}",
+            "duration": 180,
+            "seconds": 180,
+            "error": str(e),
+            "source": "fallback"
+        }
 
 @app.get("/api/queue")
 async def api_queue():

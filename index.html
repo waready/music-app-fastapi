@@ -2990,71 +2990,70 @@ new Vue({
 
         if (tracksNeedingMetadata.length === 0) return;
 
-        // Limit to 2 tracks at a time to avoid API limits and reduce quota usage
-        const batchSize = 2;
+        // Process tracks one by one using yt-dlp backend
+        const batchSize = 1; // Process one track at a time for better reliability
         const batch = tracksNeedingMetadata.slice(0, batchSize);
-        const videoIds = batch.map(track => track.id).join(',');
 
-        console.log('[QUEUE-METADATA] Fetching metadata for:', videoIds);
+        console.log('[QUEUE-METADATA] Fetching metadata using yt-dlp for:', batch.map(t => t.id).join(','));
 
         // Mark as being processed to prevent duplicate requests
         batch.forEach(track => {
           this.preservedMetadata.set(track.id, { processing: true });
         });
 
-        // Use YouTube Data API to get metadata
-        const apiKey = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
-        const apiUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoIds}&key=${apiKey}`;
+        // Process each track individually using our yt-dlp endpoint
+        for (const track of batch) {
+          try {
+            const response = await fetch(`/api/metadata/${track.id}`);
+            const metadata = await response.json();
 
-        const response = await fetch(apiUrl);
+            if (metadata && metadata.title && !metadata.error) {
+              // Update queue track with real metadata
+              const queueTrack = this.queue.find(t => t.id === track.id);
+              if (queueTrack) {
+                queueTrack.title = metadata.title;
+                if (metadata.duration && metadata.duration > 0) {
+                  queueTrack.seconds = metadata.duration;
+                }
 
-        // Check for API quota errors
-        if (response.status === 403) {
-          console.warn('[QUEUE-METADATA] YouTube Data API quota exceeded. Using fallback.');
+                // Mark as successfully processed
+                this.preservedMetadata.set(track.id, {
+                  title: metadata.title,
+                  duration: metadata.duration
+                });
 
-          // Mark tracks as processed with fallback to prevent retry loops
-          batch.forEach(track => {
-            this.preservedMetadata.set(track.id, {
-              title: track.title, // Keep placeholder title
-              quotaExceeded: true
-            });
-          });
-          return;
-        }
+                // Update server metadata
+                try {
+                  await this.updateTrackMetadata(track.id, metadata.title, metadata.duration);
+                } catch (serverError) {
+                  console.warn('[QUEUE-METADATA] Server update failed, but local update succeeded:', serverError);
+                }
 
-        const data = await response.json();
-
-        if (data.items && data.items.length > 0) {
-          for (const item of data.items) {
-            const videoId = item.id;
-            const title = item.snippet.title;
-            const duration = this.parseYouTubeDuration(item.contentDetails.duration);
-
-            // Update queue track
-            const queueTrack = this.queue.find(t => t.id === videoId);
-            if (queueTrack) {
-              queueTrack.title = title;
-              if (duration > 0) {
-                queueTrack.seconds = duration;
+                console.log('[QUEUE-METADATA] Updated via yt-dlp:', track.id, metadata.title);
               }
-
-              // Mark as successfully processed
-              this.preservedMetadata.set(videoId, { title, duration });
-
-              // Update server metadata (only try if not quota exceeded)
-              try {
-                await this.updateTrackMetadata(videoId, title, duration);
-              } catch (serverError) {
-                console.warn('[QUEUE-METADATA] Server update failed, but local update succeeded:', serverError);
-              }
-
-              console.log('[QUEUE-METADATA] Updated:', videoId, title);
+            } else {
+              // Mark as failed if no valid metadata
+              this.preservedMetadata.set(track.id, {
+                title: track.title,
+                failed: true,
+                error: metadata.error || 'No metadata available'
+              });
+              console.warn('[QUEUE-METADATA] Failed to get metadata for:', track.id, metadata.error);
             }
-          }
 
-          // Force UI update
-          this.$forceUpdate();
+          } catch (error) {
+            // Mark as failed on network/server error
+            this.preservedMetadata.set(track.id, {
+              title: track.title,
+              failed: true,
+              error: error.message
+            });
+            console.warn('[QUEUE-METADATA] Network error for:', track.id, error);
+          }
         }
+
+        // Force UI update after processing
+        this.$forceUpdate();
 
       } catch (e) {
         console.warn('[QUEUE-METADATA] Failed to fetch metadata:', e);

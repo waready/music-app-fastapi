@@ -4,6 +4,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Body
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from collections import defaultdict
 # Implementación liviana sin descargas - solo gestión de colas
 import youtube_dl
 import yt_dlp
@@ -41,6 +42,13 @@ _db_lock = asyncio.Lock()
 _rooms_lock = asyncio.Lock()
 _users_lock = asyncio.Lock()
 _sessions_lock = asyncio.Lock()
+
+# ---- Rate Limiting para yt-dlp ----
+# Según docs: ~300 videos/hora para guest sessions (~1000 requests/hora)
+_ytdlp_request_times = []  # Lista de timestamps de requests
+_ytdlp_lock = asyncio.Lock()
+YTDLP_MAX_REQUESTS_PER_HOUR = 250  # Margen de seguridad: 250 en lugar de 300
+YTDLP_MIN_INTERVAL = 5  # Mínimo 5 segundos entre requests
 
 def db_read() -> Dict[str, Any]: return load_json(DB_FILE, {})
 def db_write(db: Dict[str, Any]): save_json(DB_FILE, db)
@@ -797,34 +805,82 @@ async def api_update_track_metadata(payload: TrackMetadata):
 
         return {"success": updated, "id": payload.id}
 
+async def check_ytdlp_rate_limit():
+    """Verifica y aplica rate limiting para yt-dlp según documentación oficial"""
+    async with _ytdlp_lock:
+        now = time.time()
+
+        # Limpiar requests antiguos (más de 1 hora)
+        global _ytdlp_request_times
+        _ytdlp_request_times = [t for t in _ytdlp_request_times if now - t < 3600]
+
+        # Verificar límite por hora
+        if len(_ytdlp_request_times) >= YTDLP_MAX_REQUESTS_PER_HOUR:
+            oldest_request = min(_ytdlp_request_times)
+            wait_time = 3600 - (now - oldest_request)
+            print(f"[YT-DLP] Rate limit reached, need to wait {wait_time:.1f} seconds")
+            raise Exception(f"Rate limit exceeded. Try again in {wait_time:.1f} seconds")
+
+        # Verificar intervalo mínimo
+        if _ytdlp_request_times:
+            last_request = max(_ytdlp_request_times)
+            time_since_last = now - last_request
+            if time_since_last < YTDLP_MIN_INTERVAL:
+                wait_time = YTDLP_MIN_INTERVAL - time_since_last
+                print(f"[YT-DLP] Waiting {wait_time:.1f}s to respect minimum interval")
+                await asyncio.sleep(wait_time)
+
+        # Registrar este request
+        _ytdlp_request_times.append(time.time())
+        print(f"[YT-DLP] Rate limit OK. Requests in last hour: {len(_ytdlp_request_times)}/{YTDLP_MAX_REQUESTS_PER_HOUR}")
+
 @app.get("/api/metadata/{video_id}")
 async def api_get_metadata(video_id: str):
     """Obtiene metadata de YouTube usando yt-dlp sin descargar el video"""
     try:
         print(f"[YT-DLP] Extracting metadata for {video_id}")
 
-        # Configurar yt-dlp para solo extraer metadata con anti-bot headers
+        # Aplicar rate limiting antes de hacer el request
+        await check_ytdlp_rate_limit()
+
+        # Configurar yt-dlp con técnicas avanzadas anti-bot según documentación oficial
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
             'extract_flat': False,
             'skip_download': True,
-            'format': 'worst',  # No necesitamos formato de alta calidad
+            'format': 'worst',  # Solo metadata, no necesitamos calidad
+
+            # Headers anti-bot actualizados
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
-                'Accept-Encoding': 'gzip,deflate',
-                'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
-                'Keep-Alive': '300',
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
                 'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
             },
+
+            # Configuración avanzada según documentación yt-dlp
             'extractor_args': {
                 'youtube': {
+                    # Priorizar cliente Android (más confiable según docs)
                     'player_client': ['android', 'web'],
-                    'player_skip': ['webpage'],
+                    # Saltar webpage para evitar cookies VISITOR_INFO1_LIVE
+                    'player_skip': ['webpage', 'configs'],
+                    # Usar innertube API directamente
+                    'skip': ['webpage'],
                 }
-            }
+            },
+
+            # Rate limiting para evitar "This content isn't available"
+            'sleep_interval': 2,  # 2 segundos entre requests
+            'max_sleep_interval': 5,  # Hasta 5 segundos si hay problemas
+
+            # Timeouts más largos para producción
+            'socket_timeout': 20,
+            'retries': 3,
         }
 
         video_url = f"https://www.youtube.com/watch?v={video_id}"

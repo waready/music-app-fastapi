@@ -574,16 +574,50 @@ async def room_maybe_autostart(room: Room):
         if room.player.current_id:
             print(f"[DEBUG] Already playing {room.player.current_id}, skipping autostart")
             return
-        next_id = await room_shift_queue(room)
-        print(f"[DEBUG] Shifted next_id: {next_id}")
-        if not next_id:
-            print(f"[DEBUG] No next track in queue, broadcasting empty state")
+
+        # Buscar el siguiente track válido sin recursión para evitar consumir toda la cola
+        max_attempts = min(10, len(room.queue))  # Máximo 10 intentos para evitar bucles infinitos
+        attempts = 0
+        next_id = None
+        meta = None
+
+        while attempts < max_attempts:
+            next_id = await room_shift_queue(room)
+            print(f"[DEBUG] Attempt {attempts + 1}: Shifted next_id: {next_id}")
+
+            if not next_id:
+                print(f"[DEBUG] No more tracks in queue, broadcasting empty state")
+                await room_broadcast_state(room)
+                return
+
+            db = db_read()
+            meta = db.get(next_id)
+
+            if meta:
+                print(f"[DEBUG] Found valid track {next_id}: {meta.get('title')}")
+                break
+            else:
+                print(f"[DEBUG] Track {next_id} not found in DB, trying next track")
+                # Intentar extraer metadata para este track
+                try:
+                    print(f"[DEBUG] Attempting to extract metadata for {next_id}")
+                    extracted_meta = await extract_track_metadata(next_id)
+                    if extracted_meta:
+                        meta = extracted_meta
+                        print(f"[DEBUG] Successfully extracted metadata for {next_id}: {meta.get('title')}")
+                        break
+                    else:
+                        print(f"[DEBUG] Failed to extract metadata for {next_id}")
+                except Exception as e:
+                    print(f"[DEBUG] Error extracting metadata for {next_id}: {e}")
+
+            attempts += 1
+
+        if not meta:
+            print(f"[DEBUG] No valid tracks found after {attempts} attempts, broadcasting empty state")
             await room_broadcast_state(room)
             return
-        db = db_read(); meta = db.get(next_id)
-        if not meta:
-            print(f"[DEBUG] Track {next_id} not found in DB, recursing")
-            await room_maybe_autostart(room); return
+
         print(f"[DEBUG] Starting track {next_id}: {meta.get('title')}")
         room.player.current_id = next_id
 
@@ -798,9 +832,14 @@ async def api_update_track_metadata(payload: TrackMetadata):
             db_write(db)
             print(f"[METADATA] Updated {payload.id}: title={payload.title}, seconds={payload.seconds}")
 
-            # Temporarily disable broadcasting to fix critical errors
-            # TODO: Re-enable after fixing AttributeError issue
-            print(f"[METADATA] Broadcasting temporarily disabled - metadata saved successfully")
+            # Re-enable broadcasting now that queue synchronization is fixed
+            try:
+                # Notify all rooms that track metadata has been updated
+                for room in rooms.values():
+                    await room_broadcast_state(room)
+                print(f"[METADATA] Broadcasting re-enabled - state synchronized across all rooms")
+            except Exception as e:
+                print(f"[METADATA] Broadcasting error (non-critical): {e}")
 
         return {"success": updated, "id": payload.id}
 

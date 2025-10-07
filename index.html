@@ -2990,18 +2990,38 @@ new Vue({
 
         if (tracksNeedingMetadata.length === 0) return;
 
-        // Limit to 5 tracks at a time to avoid API limits
-        const batchSize = 5;
+        // Limit to 2 tracks at a time to avoid API limits and reduce quota usage
+        const batchSize = 2;
         const batch = tracksNeedingMetadata.slice(0, batchSize);
         const videoIds = batch.map(track => track.id).join(',');
 
         console.log('[QUEUE-METADATA] Fetching metadata for:', videoIds);
+
+        // Mark as being processed to prevent duplicate requests
+        batch.forEach(track => {
+          this.preservedMetadata.set(track.id, { processing: true });
+        });
 
         // Use YouTube Data API to get metadata
         const apiKey = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
         const apiUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoIds}&key=${apiKey}`;
 
         const response = await fetch(apiUrl);
+
+        // Check for API quota errors
+        if (response.status === 403) {
+          console.warn('[QUEUE-METADATA] YouTube Data API quota exceeded. Using fallback.');
+
+          // Mark tracks as processed with fallback to prevent retry loops
+          batch.forEach(track => {
+            this.preservedMetadata.set(track.id, {
+              title: track.title, // Keep placeholder title
+              quotaExceeded: true
+            });
+          });
+          return;
+        }
+
         const data = await response.json();
 
         if (data.items && data.items.length > 0) {
@@ -3018,11 +3038,15 @@ new Vue({
                 queueTrack.seconds = duration;
               }
 
-              // Mark as processed to avoid duplicate requests
+              // Mark as successfully processed
               this.preservedMetadata.set(videoId, { title, duration });
 
-              // Update server metadata
-              await this.updateTrackMetadata(videoId, title, duration);
+              // Update server metadata (only try if not quota exceeded)
+              try {
+                await this.updateTrackMetadata(videoId, title, duration);
+              } catch (serverError) {
+                console.warn('[QUEUE-METADATA] Server update failed, but local update succeeded:', serverError);
+              }
 
               console.log('[QUEUE-METADATA] Updated:', videoId, title);
             }
@@ -3034,6 +3058,19 @@ new Vue({
 
       } catch (e) {
         console.warn('[QUEUE-METADATA] Failed to fetch metadata:', e);
+
+        // Mark all tracks as failed to prevent retry loops
+        const tracksNeedingMetadata = this.queue.filter(track =>
+          track.title && track.title.startsWith('YouTube Video') &&
+          (!this.preservedMetadata.has(track.id) || this.preservedMetadata.get(track.id).processing)
+        );
+
+        tracksNeedingMetadata.forEach(track => {
+          this.preservedMetadata.set(track.id, {
+            title: track.title,
+            failed: true
+          });
+        });
       }
     },
 

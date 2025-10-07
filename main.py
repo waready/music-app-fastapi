@@ -1121,6 +1121,49 @@ async def api_get_metadata(video_id: str):
         except Exception as db_error:
             print(f"[YT-DLP] Database fallback failed: {db_error}")
 
+        # Fallback usando YouTube Search para obtener título básico
+        try:
+            print(f"[YT-DLP-FALLBACK] Trying YouTube Search fallback for {video_id}")
+            # Buscar el video por ID en YouTube Search
+            search_results = await search_youtube_async(video_id, max_results=5)
+
+            # Buscar el video específico en los resultados
+            for result in search_results:
+                if result.get('id', {}).get('videoId') == video_id:
+                    title = result.get('snippet', {}).get('title', '')
+                    if title and not title.startswith('YouTube Video'):
+                        print(f"[YT-DLP-FALLBACK] Found title via search: {title}")
+                        return {
+                            "id": video_id,
+                            "title": title,
+                            "duration": 180,  # Duración estimada
+                            "seconds": 180,
+                            "uploader": result.get('snippet', {}).get('channelTitle', 'Unknown'),
+                            "description": result.get('snippet', {}).get('description', '')[:200] + '...' if result.get('snippet', {}).get('description') else '',
+                            "thumbnail": result.get('snippet', {}).get('thumbnails', {}).get('medium', {}).get('url', f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg'),
+                            "source": "youtube_search_fallback"
+                        }
+
+            # Si no se encuentra por ID, intentar búsqueda por título similar
+            if search_results:
+                first_result = search_results[0]
+                title = first_result.get('snippet', {}).get('title', '')
+                if title:
+                    print(f"[YT-DLP-FALLBACK] Using similar video title: {title}")
+                    return {
+                        "id": video_id,
+                        "title": title,
+                        "duration": 180,
+                        "seconds": 180,
+                        "uploader": first_result.get('snippet', {}).get('channelTitle', 'Unknown'),
+                        "description": first_result.get('snippet', {}).get('description', '')[:200] + '...' if first_result.get('snippet', {}).get('description') else '',
+                        "thumbnail": f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg',
+                        "source": "youtube_search_similar"
+                    }
+
+        except Exception as search_error:
+            print(f"[YT-DLP-FALLBACK] YouTube Search fallback failed: {search_error}")
+
         # Último fallback con placeholder y código de error específico
         error_code = "unknown"
         if "429" in error_str or "Too Many Requests" in error_str:

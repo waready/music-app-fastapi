@@ -798,10 +798,9 @@ async def api_update_track_metadata(payload: TrackMetadata):
             db_write(db)
             print(f"[METADATA] Updated {payload.id}: title={payload.title}, seconds={payload.seconds}")
 
-            # Broadcast to all rooms that have this track
-            for room_name in rooms_read().keys():
-                room = await get_or_create_room(room_name)
-                await room_broadcast_state(room)
+            # Temporarily disable broadcasting to fix critical errors
+            # TODO: Re-enable after fixing AttributeError issue
+            print(f"[METADATA] Broadcasting temporarily disabled - metadata saved successfully")
 
         return {"success": updated, "id": payload.id}
 

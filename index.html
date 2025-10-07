@@ -2570,6 +2570,22 @@ new Vue({
             this._isRedirecting = false;
             this.connectWS();
           }
+        } else if (type === 'ok') {
+          // Handle successful operations (like queue:add)
+          if (data && data.action === 'queue:add') {
+            console.log('[QUEUE] Song successfully added to queue:', data.id);
+            // Clear adding state for the specific videoId that was added
+            this.clearAddingState(data.id);
+          }
+        } else if (type === 'warning') {
+          // Handle warnings (like restricted YouTube videos)
+          if (data && data.action === 'queue:add') {
+            console.warn('[QUEUE] Song added with warning:', data.message);
+            // Clear adding state even for warnings since the song was added
+            if (data.track && data.track.id) {
+              this.clearAddingState(data.track.id);
+            }
+          }
         } else if (type === 'room_deleted') {
           alert('⚠️ ' + data.message);
           this.switchRoom('default');
@@ -2852,9 +2868,15 @@ new Vue({
         setTimeout(this.refreshQueue, 500);
       } catch(e) {
         alert('Error agregando a la cola del room ' + this.roomName + ': ' + e.message);
-      } finally {
-        this.adding.shift();
+        // Clear adding state on error
+        this.clearAddingState(videoId);
       }
+    },
+
+    clearAddingState(videoId) {
+      // Remove the specific videoId from the adding state
+      this.adding = this.adding.filter(item => item.show !== videoId);
+      console.log('[QUEUE] Cleared adding state for:', videoId);
     },
 
     // ---- Liked Songs methods ----

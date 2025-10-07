@@ -843,6 +843,16 @@ async def api_get_metadata(video_id: str):
         # Aplicar rate limiting antes de hacer el request
         await check_ytdlp_rate_limit()
 
+        # Detectar si estamos en un entorno con Chrome disponible
+        def has_chrome_available():
+            chrome_paths = [
+                "/opt/render/.config/google-chrome",  # Render
+                os.path.expanduser("~/.config/google-chrome"),  # Linux
+                os.path.expanduser("~/Library/Application Support/Google/Chrome"),  # macOS
+                os.path.expanduser("~/AppData/Local/Google/Chrome/User Data"),  # Windows
+            ]
+            return any(os.path.exists(path) for path in chrome_paths)
+
         # Configurar yt-dlp con técnicas ULTIMATE PLUS anti-bot según documentación oficial
         ydl_opts = {
             'quiet': True,
@@ -884,9 +894,6 @@ async def api_get_metadata(video_id: str):
                     'api_key': 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8',
                 }
             },
-
-            # Cookies desde browser para máxima autenticidad (según docs)
-            'cookiesfrombrowser': ('chrome', None, None, None),  # Usar cookies de Chrome si está disponible
 
             # Geo-bypass techniques según documentación
             'geo_bypass': True,
@@ -932,6 +939,14 @@ async def api_get_metadata(video_id: str):
             'writesubtitles': False,  # No escribir subtítulos
             'writeautomaticsub': False,  # No escribir sub automáticos
         }
+
+        # Agregar cookies solo si Chrome está disponible (para desarrollo local)
+        if has_chrome_available():
+            print("[YT-DLP] Chrome detectado, usando cookies para autenticidad máxima")
+            ydl_opts['cookiesfrombrowser'] = ('chrome', None, None, None)
+        else:
+            print("[YT-DLP] Chrome no disponible, usando configuración sin cookies (servidor)")
+            # En servidores sin Chrome, dependemos de headers y clients para autenticidad
 
         video_url = f"https://www.youtube.com/watch?v={video_id}"
 

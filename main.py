@@ -4,10 +4,9 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Body
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-# Reemplazado yt-dlp con pytubefix para evitar bot detection
-# from yt_dlp import YoutubeDL
-from pytubefix import YouTube, Search
-from pytubefix.exceptions import VideoUnavailable, PytubeFixError
+# Implementación liviana sin descargas - solo gestión de colas
+import youtube_dl
+from youtube_search import YoutubeSearch
 import bcrypt
 
 # Modo de streaming: "direct" (desde YouTube) o "download" (descargar MP3)
@@ -124,14 +123,56 @@ def _refresh_track_background(url_or_id: str):
         print(f"[BACKGROUND] Error refrescando {url_or_id}: {e}")
 
 # ---- Búsqueda en YouTube ----
-def _search_youtube_deprecated(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
-    """Buscar videos en YouTube usando yt-dlp - DEPRECATED: usar pytubefix"""
-    print("[DEPRECATED] _search_youtube_deprecated called - use pytubefix instead")
-    return []
+def _search_youtube_with_library(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
+    """Buscar videos en YouTube usando youtube-search-python"""
+    try:
+        print(f"[YOUTUBE-SEARCH] Buscando: {query} (max: {max_results})")
+
+        # Usar youtube-search-python
+        results = YoutubeSearch(query, max_results=max_results).to_dict()
+
+        formatted_results = []
+        for video in results:
+            video_id = video.get('id', '')
+            title = video.get('title', f"YouTube Video {video_id}")
+            channel = video.get('channel', 'Unknown')
+            duration = video.get('duration', '0:00')
+            thumbnail_url = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+
+            # Use thumbnail from API if available
+            thumbnails = video.get('thumbnails', [])
+            if thumbnails and len(thumbnails) > 0:
+                thumbnail_url = thumbnails[0]
+
+            formatted_results.append({
+                'id': {
+                    'kind': 'youtube#video',
+                    'videoId': video_id
+                },
+                'snippet': {
+                    'title': title,
+                    'description': video.get('long_desc', ''),
+                    'thumbnails': {
+                        'default': {
+                            'url': thumbnail_url
+                        }
+                    },
+                    'channelTitle': channel,
+                },
+                'duration': duration,
+                'url': f"https://www.youtube.com/watch?v={video_id}"
+            })
+
+        print(f"[YOUTUBE-SEARCH] Encontrados {len(formatted_results)} resultados para '{query}'")
+        return formatted_results
+
+    except Exception as e:
+        print(f"[YOUTUBE-SEARCH] Error buscando en YouTube: {e}")
+        return []
 
 async def search_youtube_async(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
-    """Ejecuta búsqueda en hilo para no bloquear el loop - DEPRECATED"""
-    return await asyncio.to_thread(_search_youtube_deprecated, query, max_results)
+    """Ejecuta búsqueda en hilo para no bloquear el loop"""
+    return await asyncio.to_thread(_search_youtube_with_library, query, max_results)
 
 def _search_youtube_pytubefix(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
     """Buscar videos en YouTube usando pytubefix con PO Tokens (reemplazo de yt-dlp)"""
@@ -330,24 +371,8 @@ def _download_yt_to_mp3(url_or_id: str) -> Dict[str, Any]:
     # DEPRECATED: Código comentado - usar pytubefix
 
 async def ensure_track(url_or_id: str) -> Dict[str, Any]:
-    """Obtiene track según el modo configurado"""
-    # Aplicar delay adaptativo antes de procesar
-    await adaptive_delay()
-
+    """Crea track básico para gestión de cola sin descargas pesadas"""
     db = db_read()
-
-    # Si ya existe en DB, retornar inmediatamente
-    if url_or_id in db:
-        cached = db[url_or_id]
-        # Para modo direct, verificar si URL expiró
-        if STREAMING_MODE == "direct":
-            timestamp = cached.get("timestamp", 0)
-            if time.time() - timestamp < 18000:  # 5 horas
-                return cached
-            # Si expiró, refrescar en background pero devolver el cache actual
-            print(f"[CACHE] URL expirada para {url_or_id}, refrescando en background")
-            asyncio.create_task(asyncio.to_thread(_refresh_track_background, url_or_id))
-        return cached
 
     # Extraer video ID de URL si es necesario
     video_id = url_or_id
@@ -358,27 +383,27 @@ async def ensure_track(url_or_id: str) -> Dict[str, Any]:
         elif "youtu.be/" in url_or_id:
             video_id = url_or_id.split("youtu.be/")[1].split("?")[0]
 
-    # Crear entrada temporal con estado "processing"
-    temp_record = {
+    # Si ya existe en DB, retornar inmediatamente
+    if video_id in db:
+        return db[video_id]
+
+    # Crear registro básico para gestión de cola (sin procesamiento pesado)
+    record = {
         "id": video_id,
-        "title": "Procesando...",
-        "seconds": 0,
+        "title": f"YouTube Video {video_id}",  # Título placeholder
+        "seconds": 180,  # Duración placeholder (3 minutos)
         "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
-        "mode": STREAMING_MODE,
-        "processing": True,  # Indica que está en proceso
+        "mode": "lightweight",  # Modo liviano sin descargas
+        "timestamp": time.time(),
+        "url": f"https://www.youtube.com/watch?v={video_id}"
     }
 
-    # Guardar registro temporal en DB
-    db[video_id] = temp_record
+    # Guardar en DB
+    db[video_id] = record
     db_write(db)
 
-    # Procesar en background sin bloquear
-    if STREAMING_MODE == "direct":
-        asyncio.create_task(asyncio.to_thread(_get_yt_stream_info_pytubefix, url_or_id))
-    else:
-        asyncio.create_task(asyncio.to_thread(_download_yt_to_mp3, url_or_id))
-
-    return temp_record
+    print(f"[LIGHTWEIGHT] Track creado para cola: {video_id}")
+    return record
 
 # ---- Streaming con Range ----
 CHUNK = 1024 * 1024
@@ -757,7 +782,7 @@ async def api_search(q: str, maxResults: int = 30):
     if not q:
         return JSONResponse({"error": "Query parameter 'q' is required"}, status_code=400)
 
-    results = await search_youtube_pytubefix_async(q, maxResults)
+    results = await search_youtube_async(q, maxResults)
     return {
         "items": results,
         "pageInfo": {
@@ -785,6 +810,17 @@ async def stream(request: Request, track_id: str):
             "track_id": track_id,
             "title": track.get("title", "YouTube Video"),
             "mode": "hybrid"
+        }, status_code=503)
+
+    # MODO LIGHTWEIGHT: No hay streaming de servidor, solo gestión de cola
+    if mode == "lightweight":
+        return JSONResponse({
+            "error": "Track en modo lightweight",
+            "message": "Esta canción está siendo reproducida directamente por el cliente (YouTube Player). El servidor solo gestiona la cola.",
+            "track_id": track_id,
+            "title": track.get("title", "YouTube Video"),
+            "mode": "lightweight",
+            "youtube_url": track.get("url", f"https://www.youtube.com/watch?v={track_id}")
         }, status_code=503)
 
     # MODO NO DISPONIBLE: YouTube está bloqueando el acceso

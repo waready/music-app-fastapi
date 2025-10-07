@@ -2516,12 +2516,20 @@ new Vue({
           // Actualizar nombre de room si viene del servidor
           if (data.room_name) this.roomName = data.room_name;
 
-          // Si cambió la canción actual, usar el player híbrido
+          // Si cambió la canción actual, usar el player híbrido SIEMPRE
           const newCurrentId = this.state.current ? this.state.current.id : null;
-          if (newCurrentId && newCurrentId !== oldCurrentId && this.state.playing) {
-            console.log('New track detected, playing with hybrid player:', newCurrentId);
-            this.playHybrid(newCurrentId);
-          } else {
+          if (newCurrentId && newCurrentId !== oldCurrentId) {
+            console.log('[HYBRID] New track detected, using hybrid player:', newCurrentId);
+
+            // Forzar reproducción híbrida independientemente del estado del servidor
+            if (this.state.playing) {
+              this.playHybrid(newCurrentId);
+            } else {
+              // Preparar para reproducción cuando se presione play
+              console.log('[HYBRID] Track loaded, ready for playback');
+            }
+          } else if (!newCurrentId) {
+            // No hay canción actual, sincronizar normalmente
             this.syncAudio();
           }
         } else if (type === 'queue:update') {
@@ -3542,12 +3550,15 @@ new Vue({
 
     // Initialize Hybrid Player System
     this.$nextTick(() => {
+      console.log('[HYBRID] Initializing hybrid player system...');
+
       // Detectar tipo de dispositivo primero
       this.detectMobileDevice();
       this.setupUserInteractionHandlers();
 
       // Solo en desktop, detectar ad blocker y configurar YouTube Player
       if (!this.isMobile) {
+        console.log('[HYBRID] Desktop detected - initializing YouTube Player');
         this.detectAdBlocker();
 
         // Initialize YouTube Player when API is ready (solo desktop)
@@ -3556,12 +3567,22 @@ new Vue({
         } else {
           // Wait for YouTube API to load
           window.onYouTubeIframeAPIReady = () => {
+            console.log('[HYBRID] YouTube API loaded, initializing player');
             this.initYouTubePlayer();
           };
         }
       } else {
-        console.log('[HYBRID] Mobile device detected - skipping YouTube Player initialization');
+        console.log('[HYBRID] Mobile device detected - using native audio strategy');
+        // En móvil, marcar como listo inmediatamente
+        this.youtubePlayerReady = false; // Asegurar que no use YouTube Player
       }
+
+      // Debug: mostrar estado del sistema
+      console.log('[HYBRID] System status:', {
+        isMobile: this.isMobile,
+        userInteracted: this.userInteracted,
+        youtubePlayerReady: this.youtubePlayerReady
+      });
     });
 
     // Setup audio element

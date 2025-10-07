@@ -1908,8 +1908,12 @@ new Vue({
 
   computed: {
     audioSrc() {
-      // Si estamos usando YouTube Player, no usar audio element del servidor
+      // Si estamos usando YouTube Player O si el track está en modo híbrido, no usar audio element del servidor
       if (this.isUsingYouTubePlayer) {
+        return '';
+      }
+      // También verificar si el track actual está en modo híbrido (para arquitectura serverless)
+      if (this.state.current && (this.state.current.mode === 'hybrid' || this.state.current.mode === 'lightweight')) {
         return '';
       }
       return this.state.current ? `/stream/${this.state.current.id}` : '';
@@ -2522,8 +2526,28 @@ new Vue({
         const {type, data} = JSON.parse(ev.data);
         if (type === 'state') {
           const oldCurrentId = this.state.current ? this.state.current.id : null;
+          const preservedTitle = this.state.current && this.state.current.title &&
+                                !this.state.current.title.startsWith('YouTube Video') ?
+                                this.state.current.title : null;
+          const preservedDuration = this.state.duration && this.state.duration !== 180 ?
+                                   this.state.duration : null;
+
           this.state = Object.assign(this.state, data);
           this.queue = data.queue || [];
+
+          // Preservar título real del YouTube Player si es mejor que el placeholder
+          if (preservedTitle && this.state.current &&
+              this.state.current.title.startsWith('YouTube Video')) {
+            this.state.current.title = preservedTitle;
+            console.log('[HYBRID] Preserved real title:', preservedTitle);
+          }
+
+          // Preservar duración real del YouTube Player si es mejor que el placeholder
+          if (preservedDuration && (this.state.duration === 180 || this.state.duration === 0)) {
+            this.state.duration = preservedDuration;
+            this.state.durationLabel = this.mmss(preservedDuration);
+            console.log('[HYBRID] Preserved real duration:', preservedDuration);
+          }
           // Actualizar nombre de room si viene del servidor
           if (data.room_name) this.roomName = data.room_name;
 

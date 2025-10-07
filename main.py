@@ -843,7 +843,7 @@ async def api_get_metadata(video_id: str):
         # Aplicar rate limiting antes de hacer el request
         await check_ytdlp_rate_limit()
 
-        # Configurar yt-dlp con técnicas avanzadas anti-bot según documentación oficial
+        # Configurar yt-dlp con técnicas ULTIMATE PLUS anti-bot según documentación oficial
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
@@ -851,62 +851,209 @@ async def api_get_metadata(video_id: str):
             'skip_download': True,
             'format': 'worst',  # Solo metadata, no necesitamos calidad
 
-            # Headers anti-bot actualizados
+            # Headers anti-bot más realistas (Chrome en Android más reciente)
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
-                'Accept': '*/*',
-                'Accept-Language': 'en-US,en;q=0.9',
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 14; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
                 'Accept-Encoding': 'gzip, deflate, br',
                 'DNT': '1',
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+                'Sec-Ch-Ua-Mobile': '?1',
+                'Sec-Ch-Ua-Platform': '"Android"',
+                'Cache-Control': 'max-age=0',
+                'Referer': 'https://www.youtube.com/',
             },
 
-            # Configuración avanzada según documentación yt-dlp
+            # Configuración avanzada PLUS según documentación yt-dlp
             'extractor_args': {
                 'youtube': {
-                    # Priorizar cliente Android (más confiable según docs)
-                    'player_client': ['android', 'web'],
-                    # Saltar webpage para evitar cookies VISITOR_INFO1_LIVE
+                    # Priorizar cliente Android exclusivamente (más confiable según docs)
+                    'player_client': ['android'],
+                    # Saltar webpage completamente para evitar cookies VISITOR_INFO1_LIVE
                     'player_skip': ['webpage', 'configs'],
-                    # Usar innertube API directamente
+                    # Usar innertube API directamente sin webpage
                     'skip': ['webpage'],
+                    # Usar API key para better reliability (opcional según docs)
+                    'api_key': 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8',
                 }
             },
 
-            # Rate limiting para evitar "This content isn't available"
-            'sleep_interval': 2,  # 2 segundos entre requests
-            'max_sleep_interval': 5,  # Hasta 5 segundos si hay problemas
+            # Cookies desde browser para máxima autenticidad (según docs)
+            'cookiesfrombrowser': ('chrome', None, None, None),  # Usar cookies de Chrome si está disponible
 
-            # Timeouts más largos para producción
-            'socket_timeout': 20,
-            'retries': 3,
+            # Geo-bypass techniques según documentación
+            'geo_bypass': True,
+            'geo_bypass_country': 'US',  # Usar US como país por defecto
+            'geo_bypass_ip_block': None,  # No especificar bloque IP específico
+
+            # Source address consistency para estabilidad IP según docs
+            'source_address': None,  # Dejar que el sistema elija la mejor interfaz
+
+            # Rate limiting más conservador según docs PLUS
+            'sleep_interval': 5,  # 5 segundos entre requests (más conservador)
+            'max_sleep_interval': 15,  # Hasta 15 segundos si hay problemas
+            'sleep_interval_requests': 1,  # 1 segundo entre requests HTTP individuales
+            'sleep_interval_subtitles': 0,  # Sin delay para subtítulos (no los usamos)
+
+            # Timeouts y reintentos más robustos para producción PLUS
+            'socket_timeout': 45,  # Timeout más largo para conexiones lentas
+            'retries': 8,  # Más reintentos
+            'fragment_retries': 8,  # Reintentos para fragmentos
+            'file_access_retries': 3,  # Reintentos para acceso a archivos
+
+            # Configuración de chunks según docs: YouTube throttle >10MB chunks
+            'http_chunk_size': 1048576,  # 1MB chunks (mucho menor que 10MB)
+            'external_downloader_args': {'ffmpeg': ['-loglevel', 'error']},  # Silenciar ffmpeg
+
+            # Manejo de errores específicos según documentación PLUS
+            'retry_sleep_functions': {
+                'http': lambda n: min(6 * (2 ** (n - 1)), 120),  # Exponential backoff más agresivo
+                'fragment': lambda n: min(4 * (2 ** (n - 1)), 60),
+                'extractor': lambda n: min(2 * (2 ** (n - 1)), 30),
+            },
+
+            # Evitar problemas de encoding según docs
+            'encoding': 'utf-8',
+            'prefer_free_formats': True,  # Preferir formatos libres
+            'no_color': True,  # Sin colores en output
+
+            # Configuración adicional para estabilidad según docs
+            'ignoreerrors': False,  # No ignorar errores (queremos detectarlos)
+            'no_warnings': True,  # Pero sí suprimir warnings
+            'writeinfojson': False,  # No escribir JSON info
+            'writethumbnail': False,  # No escribir thumbnail
+            'writesubtitles': False,  # No escribir subtítulos
+            'writeautomaticsub': False,  # No escribir sub automáticos
         }
 
         video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Extraer solo la información del video
-            info = ydl.extract_info(video_url, download=False)
-
-            metadata = {
-                "id": video_id,
-                "title": info.get('title', f'YouTube Video {video_id}'),
-                "duration": info.get('duration', 180),
-                "seconds": info.get('duration', 180),
-                "uploader": info.get('uploader', 'Unknown'),
-                "view_count": info.get('view_count', 0),
-                "upload_date": info.get('upload_date', None),
-                "description": info.get('description', '')[:200] + '...' if info.get('description') else '',
-                "thumbnail": info.get('thumbnail', f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg'),
-                "source": "yt-dlp"
+        # Definir fallback de clientes según documentación yt-dlp (orden de confiabilidad)
+        client_fallbacks = [
+            {
+                'name': 'android',
+                'config': ['android'],
+                'description': 'Cliente Android (más confiable según docs)'
+            },
+            {
+                'name': 'ios',
+                'config': ['ios'],
+                'description': 'Cliente iOS (segunda opción)'
+            },
+            {
+                'name': 'web',
+                'config': ['web'],
+                'description': 'Cliente Web (tercera opción)'
+            },
+            {
+                'name': 'tv_embedded',
+                'config': ['tv_embedded'],
+                'description': 'Cliente TV embebido (última opción)'
+            },
+            {
+                'name': 'multi',
+                'config': ['android', 'ios', 'web'],
+                'description': 'Múltiples clientes (fallback final)'
             }
+        ]
 
-            print(f"[YT-DLP] Successfully extracted: {metadata['title']} ({metadata['duration']}s)")
-            return metadata
+        last_error = None
+
+        # Intentar cada cliente en orden de prioridad
+        for attempt, client_info in enumerate(client_fallbacks, 1):
+            try:
+                print(f"[YT-DLP] Intento {attempt}/5: {client_info['description']}")
+
+                # Crear configuración específica para este cliente
+                current_ydl_opts = ydl_opts.copy()
+                current_ydl_opts['extractor_args'] = {
+                    'youtube': {
+                        'player_client': client_info['config'],
+                        'player_skip': ['webpage', 'configs'],
+                        'skip': ['webpage'],
+                        'api_key': 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8',
+                    }
+                }
+
+                # Para clientes web, ajustar headers a desktop
+                if client_info['name'] == 'web':
+                    current_ydl_opts['http_headers']['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+                    current_ydl_opts['http_headers']['Sec-Ch-Ua-Mobile'] = '?0'
+                    current_ydl_opts['http_headers']['Sec-Ch-Ua-Platform'] = '"Windows"'
+
+                with yt_dlp.YoutubeDL(current_ydl_opts) as ydl:
+                    # Extraer solo la información del video
+                    info = ydl.extract_info(video_url, download=False)
+
+                    metadata = {
+                        "id": video_id,
+                        "title": info.get('title', f'YouTube Video {video_id}'),
+                        "duration": info.get('duration', 180),
+                        "seconds": info.get('duration', 180),
+                        "uploader": info.get('uploader', 'Unknown'),
+                        "view_count": info.get('view_count', 0),
+                        "upload_date": info.get('upload_date', None),
+                        "description": info.get('description', '')[:200] + '...' if info.get('description') else '',
+                        "thumbnail": info.get('thumbnail', f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg'),
+                        "source": f"yt-dlp-{client_info['name']}"
+                    }
+
+                    print(f"[YT-DLP] Éxito con cliente {client_info['name']}: {metadata['title'][:50]}...")
+                    break  # Salir del loop si fue exitoso
+
+            except Exception as e:
+                error_str = str(e)
+                last_error = error_str
+                print(f"[YT-DLP] Cliente {client_info['name']} falló: {error_str[:100]}...")
+
+                # Si es el último intento, lanzar el error
+                if attempt == len(client_fallbacks):
+                    print(f"[YT-DLP] Todos los clientes fallaron para {video_id}")
+                    raise e
+
+                # Para errores específicos, saltar al siguiente cliente inmediatamente
+                if any(phrase in error_str for phrase in [
+                    'Failed to extract any player response',
+                    'Unable to extract Initial JS player',
+                    'Video unavailable',
+                    'Private video'
+                ]):
+                    print(f"[YT-DLP] Error crítico, probando siguiente cliente...")
+                    continue
+
+                # Para otros errores, esperar un poco antes del siguiente intento
+                await asyncio.sleep(2)
+
+        # Si llegamos aquí, significa que tuvimos éxito con algún cliente
+        print(f"[YT-DLP] Successfully extracted: {metadata['title']} ({metadata['duration']}s)")
+        return metadata
 
     except Exception as e:
-        print(f"[YT-DLP] Error extracting metadata for {video_id}: {e}")
+        error_str = str(e)
+        print(f"[YT-DLP] Error extracting metadata for {video_id}: {error_str}")
+
+        # Manejo específico de errores según documentación yt-dlp
+        if "429" in error_str or "Too Many Requests" in error_str:
+            print(f"[YT-DLP] Rate limit detected for {video_id}. Service is blocking due to overuse.")
+            # Agregar delay adicional para próximos requests
+            global _ytdlp_request_times
+            _ytdlp_request_times.extend([time.time()] * 10)  # Penalty: contar como 10 requests
+
+        elif "402" in error_str or "Payment Required" in error_str:
+            print(f"[YT-DLP] Payment required error for {video_id}. IP may be blocked.")
+
+        elif "Sign in to confirm you're not a bot" in error_str:
+            print(f"[YT-DLP] Bot detection triggered for {video_id}. Advanced anti-bot failed.")
+
+        elif "This content isn't available" in error_str:
+            print(f"[YT-DLP] Content unavailable for {video_id}. May be rate limited or geo-blocked.")
 
         # Intentar obtener metadata básica de la base de datos si ya existe
         try:
@@ -925,13 +1072,24 @@ async def api_get_metadata(video_id: str):
         except Exception as db_error:
             print(f"[YT-DLP] Database fallback failed: {db_error}")
 
-        # Último fallback con placeholder
+        # Último fallback con placeholder y código de error específico
+        error_code = "unknown"
+        if "429" in error_str or "Too Many Requests" in error_str:
+            error_code = "rate_limit"
+        elif "402" in error_str or "Payment Required" in error_str:
+            error_code = "payment_required"
+        elif "Sign in to confirm you're not a bot" in error_str:
+            error_code = "bot_detected"
+        elif "This content isn't available" in error_str:
+            error_code = "content_unavailable"
+
         return {
             "id": video_id,
             "title": f"YouTube Video {video_id}",
             "duration": 180,
             "seconds": 180,
-            "error": str(e),
+            "error": error_str,
+            "error_code": error_code,
             "source": "placeholder_fallback"
         }
 

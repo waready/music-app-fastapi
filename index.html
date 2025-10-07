@@ -1182,7 +1182,13 @@
 
             <!-- Queue -->
             <div class="queue-section">
-              <h2 class="section-title">Cola de reproducción</h2>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <h2 class="section-title" style="margin: 0;">Cola de reproducción</h2>
+              <button v-if="queue.length" @click="refreshAllQueueMetadata()"
+                      style="background: var(--spotify-green); color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">
+                🔄 Actualizar títulos
+              </button>
+            </div>
               <div v-if="!queue.length" class="queue-empty">
                 <p>No hay canciones en la cola</p>
                 <p style="font-size: 0.875rem; margin-top: 0.5rem;">Busca música para empezar a escuchar</p>
@@ -1973,8 +1979,80 @@ new Vue({
         return track.title;
       }
 
+      // Si llegamos aquí y no tenemos metadata, intentar obtenerla automáticamente
+      if (!preserved || preserved.failed) {
+        this.fetchSingleTrackMetadata(track.id);
+      }
+
       // Por último, usar placeholder
       return `YouTube Video ${track.id}`;
+    },
+
+    // Función para obtener metadata de un solo track
+    async fetchSingleTrackMetadata(trackId) {
+      // Evitar múltiples requests para el mismo track
+      if (this.preservedMetadata.has(trackId)) {
+        const existing = this.preservedMetadata.get(trackId);
+        if (existing.processing || (existing.title && !existing.failed)) {
+          return;
+        }
+      }
+
+      console.log(`[METADATA-FETCH] Getting metadata for single track: ${trackId}`);
+
+      // Marcar como procesando
+      this.preservedMetadata.set(trackId, { processing: true });
+
+      try {
+        const response = await fetch(`/api/metadata/${trackId}`);
+        const metadata = await response.json();
+
+        if (metadata && metadata.title && !metadata.error) {
+          // Actualizar metadata preservada
+          this.preservedMetadata.set(trackId, {
+            title: metadata.title,
+            duration: metadata.duration
+          });
+
+          // Actualizar el track en la cola si existe
+          const queueTrack = this.queue.find(t => t.id === trackId);
+          if (queueTrack) {
+            queueTrack.title = metadata.title;
+            if (metadata.duration && metadata.duration > 0) {
+              queueTrack.seconds = metadata.duration;
+            }
+          }
+
+          // Forzar actualización de Vue
+          this.$forceUpdate();
+
+          console.log(`[METADATA-FETCH] Successfully updated: ${trackId} -> ${metadata.title}`);
+        } else {
+          // Marcar como fallido
+          this.preservedMetadata.set(trackId, {
+            title: `YouTube Video ${trackId}`,
+            failed: true,
+            error: metadata.error || 'No metadata available'
+          });
+        }
+      } catch (error) {
+        console.warn(`[METADATA-FETCH] Error for ${trackId}:`, error);
+        this.preservedMetadata.set(trackId, {
+          title: `YouTube Video ${trackId}`,
+          failed: true,
+          error: error.message
+        });
+      }
+    },
+
+    // Función para refrescar metadata de toda la cola
+    refreshAllQueueMetadata() {
+      console.log('[METADATA-REFRESH] Refreshing metadata for all queue items');
+      this.queue.forEach(track => {
+        if (track.title.startsWith('YouTube Video')) {
+          this.fetchSingleTrackMetadata(track.id);
+        }
+      });
     },
 
     // === HYBRID PLAYER SYSTEM ===
@@ -2614,7 +2692,16 @@ new Vue({
 
       console.log('[WS] Conectando a:', wsUrl);
       this.ws = new WebSocket(wsUrl);
-      this.ws.onopen = () => { this.connected = true; };
+      this.ws.onopen = () => {
+        this.connected = true;
+        // Refrescar metadata de tracks existentes al conectar
+        setTimeout(() => {
+          if (this.queue.length > 0) {
+            console.log('[WS-CONNECT] Refreshing metadata for existing queue items');
+            this.refreshAllQueueMetadata();
+          }
+        }, 1000);
+      };
       this.ws.onclose = () => {
         this.connected = false;
         // Solo reconectar si no estamos siendo redirigidos

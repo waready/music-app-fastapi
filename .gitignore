@@ -1,0 +1,109 @@
+# =========================
+# Media y descargas (mantener carpeta con .gitkeep)
+# =========================
+media/**
+!media/.gitkeep
+
+downloads/**
+!downloads/.gitkeep
+
+public/media/**
+!public/media/.gitkeep
+
+static/media/**
+!static/media/.gitkeep
+
+static/audio/**
+!static/audio/.gitkeep
+
+# Archivos pesados de audio/vídeo que no queremos versionar
+*.mp3
+*.m4a
+*.aac
+*.flac
+*.wav
+*.ogg
+*.opus
+*.webm
+*.mp4
+*.mkv
+
+# Temporales de descargas (yt-dlp/aria2)
+*.part
+*.temp
+*.ytdl
+*.aria2
+
+# =========================
+# Datos/DB temporales de la app
+# =========================
+db.json
+db.txt
+queue.json
+*.sqlite
+*.sqlite3
+
+# =========================
+# Python / FastAPI
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.venv/
+venv/
+env/
+.uv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+dist/
+build/
+*.egg-info/
+pip-wheel-metadata/
+.coverage*
+htmlcov/
+uvicorn*.log
+*.pid
+
+# =========================
+# Node/JS
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
+
+# =========================
+# Frontend builds
+# =========================
+dist/
+build/
+*.map
+.next/
+out/
+
+# =========================
+# Config/secretos
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Editor/IDE/OS
+# =========================
+.vscode/
+.idea/
+*.sublime-*
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*.orig

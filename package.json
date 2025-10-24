@@ -1,0 +1,12 @@
+{
+  "name": "music-app-fastapi",
+  "version": "1.0.0",
+  "description": "Node.js dependencies for pytubefix PO token generation",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {},
+  "scripts": {
+    "build": "echo 'Node.js installed for pytubefix PO tokens'"
+  }
+}

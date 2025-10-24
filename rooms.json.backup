@@ -1,0 +1,31 @@
+{
+  "default": {
+    "id": "default",
+    "name": "Room default",
+    "created_by": null,
+    "queue": [
+      "bh9iK4iABJc",
+      "xvVLWSsKjkI",
+      "SzimletXB7M",
+      "X4bgXH3sJ2Q"
+    ]
+  },
+  "undefined": {
+    "id": "undefined",
+    "name": "Room undefined",
+    "created_by": null,
+    "queue": []
+  },
+  "dd53a1d3": {
+    "id": "dd53a1d3",
+    "name": "Mi fiesta",
+    "created_by": null,
+    "queue": []
+  },
+  "e4abf293": {
+    "id": "e4abf293",
+    "name": "edwin",
+    "created_by": null,
+    "queue": []
+  }
+}

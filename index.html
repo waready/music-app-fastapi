@@ -1,0 +1,4320 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Music Player - Spotify Style</title>
+  <link href="https://fonts.googleapis.com/css2?family=Circular+Std:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+  <!-- YouTube Player API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <!-- YouTube-DL.js para fallback (solo en navegadores que lo soporten) -->
+  <script>
+    // Detectar si podemos usar youtube-dl (navegadores modernos)
+    window.supportsYoutubeDL = typeof Worker !== 'undefined' && typeof WebAssembly !== 'undefined';
+  </script>
+  <style>
+    :root {
+      --spotify-green: #1db954;
+      --spotify-black: #000000;
+      --spotify-dark: #121212;
+      --spotify-darker: #0a0a0a;
+      --spotify-gray: #181818;
+      --spotify-light-gray: #282828;
+      --spotify-text: #ffffff;
+      --spotify-text-subdued: #b3b3b3;
+      --spotify-hover: #1a1a1a;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Circular Std', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      background-color: var(--spotify-black);
+      color: var(--spotify-text);
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    .app-container {
+      display: flex;
+      height: 100vh;
+      flex-direction: column;
+    }
+
+    .main-layout {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 16rem;
+      background-color: var(--spotify-black);
+      color: var(--spotify-text);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      border-right: 1px solid var(--spotify-gray);
+    }
+
+    .sidebar-logo {
+      padding: 1.5rem;
+    }
+
+    .sidebar-logo h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--spotify-text);
+    }
+
+    .sidebar-nav {
+      padding: 0 1.5rem;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.75rem 1rem;
+      border-radius: 0.375rem;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      margin-bottom: 0.5rem;
+      text-decoration: none;
+      color: var(--spotify-text-subdued);
+    }
+
+    .nav-item:hover {
+      background-color: var(--spotify-gray);
+      color: var(--spotify-text);
+    }
+
+    .nav-item.active {
+      background-color: var(--spotify-gray);
+      color: var(--spotify-text);
+    }
+
+    .nav-icon {
+      width: 1.25rem;
+      height: 1.25rem;
+      fill: currentColor;
+    }
+
+    .separator {
+      margin: 1rem 1.5rem;
+      border-top: 1px solid var(--spotify-gray);
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      background: linear-gradient(to bottom, var(--spotify-dark), var(--spotify-black));
+      overflow-y: auto;
+      position: relative;
+    }
+
+    .content-header {
+      position: sticky;
+      top: 0;
+      background: var(--spotify-dark);
+      padding: 2rem;
+      z-index: 10;
+    }
+
+    .content-body {
+      padding: 0 2rem 2rem;
+    }
+
+    /* Search Section */
+    .search-section {
+      margin-bottom: 2rem;
+    }
+
+    .search-container {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .search-input {
+      background-color: white;
+      color: black;
+      border: none;
+      border-radius: 9999px;
+      padding: 0.75rem 3rem 0.75rem 1rem;
+      font-weight: 500;
+      width: 100%;
+      max-width: 28rem;
+      font-size: 0.875rem;
+    }
+
+    .search-input:focus {
+      outline: none;
+      box-shadow: 0 0 0 2px var(--spotify-green);
+    }
+
+    .search-btn {
+      background-color: var(--spotify-green);
+      color: white;
+      border: none;
+      border-radius: 9999px;
+      padding: 0.75rem 1.5rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .search-btn:hover {
+      background-color: #1ed760;
+      transform: scale(1.05);
+    }
+
+    .search-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Results Section */
+    .results-section {
+      background-color: var(--spotify-light-gray);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .results-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .results-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--spotify-text);
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: var(--spotify-text-subdued);
+      cursor: pointer;
+      padding: 0.5rem;
+      border-radius: 0.25rem;
+      transition: color 0.2s;
+    }
+
+    .close-btn:hover {
+      color: var(--spotify-text);
+    }
+
+    .song-grid {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .song-item {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.75rem;
+      border-radius: 0.375rem;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .song-item:hover {
+      background-color: var(--spotify-hover);
+    }
+
+    .song-thumbnail {
+      width: 4rem;
+      height: 4rem;
+      border-radius: 0.375rem;
+      object-fit: cover;
+    }
+
+    .song-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .song-title {
+      font-weight: 600;
+      color: var(--spotify-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 0.25rem;
+    }
+
+    .song-artist {
+      color: var(--spotify-text-subdued);
+      font-size: 0.875rem;
+    }
+
+    .song-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .play-btn, .queue-btn {
+      background-color: var(--spotify-green);
+      color: white;
+      border: none;
+      border-radius: 0.375rem;
+      padding: 0.5rem 1rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .queue-btn {
+      background-color: transparent;
+      border: 1px solid var(--spotify-text-subdued);
+      color: var(--spotify-text-subdued);
+    }
+
+    .play-btn:hover {
+      background-color: #1ed760;
+      transform: scale(1.05);
+    }
+
+    .queue-btn:hover {
+      border-color: var(--spotify-text);
+      color: var(--spotify-text);
+    }
+
+    /* Player */
+    .player {
+      background-color: var(--spotify-gray);
+      border-top: 1px solid #1f2937;
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      height: 5rem;
+    }
+
+    .player-info {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .current-track-thumbnail {
+      width: 3.5rem;
+      height: 3.5rem;
+      border-radius: 0.375rem;
+      object-fit: cover;
+    }
+
+    .current-track-info {
+      min-width: 0;
+    }
+
+    .current-track-title {
+      font-weight: 600;
+      color: var(--spotify-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 0.25rem;
+    }
+
+    .current-track-time {
+      color: var(--spotify-text-subdued);
+      font-size: 0.875rem;
+    }
+
+    .player-controls {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex: 1;
+      justify-content: center;
+    }
+
+    .control-btn {
+      background: none;
+      border: none;
+      color: var(--spotify-text);
+      cursor: pointer;
+      padding: 0.5rem;
+      border-radius: 50%;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .control-btn:hover {
+      color: var(--spotify-green);
+      transform: scale(1.1);
+    }
+
+    .play-pause-btn {
+      background-color: var(--spotify-green);
+      color: black;
+      width: 2rem;
+      height: 2rem;
+    }
+
+    .play-pause-btn:hover {
+      background-color: #1ed760;
+      color: black;
+      transform: scale(1.1);
+    }
+
+    .player-volume {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex: 1;
+      justify-content: flex-end;
+      min-width: 180px;
+    }
+
+    .volume-slider {
+      width: 100px;
+      height: 4px;
+      background: var(--spotify-hover);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    .volume-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 12px;
+      height: 12px;
+      background: var(--spotify-text);
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .volume-slider::-webkit-slider-thumb:hover {
+      background: var(--spotify-green);
+      transform: scale(1.2);
+    }
+
+    .volume-slider::-moz-range-thumb {
+      width: 12px;
+      height: 12px;
+      background: var(--spotify-text);
+      border-radius: 50%;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+
+    .volume-slider::-moz-range-thumb:hover {
+      background: var(--spotify-green);
+      transform: scale(1.2);
+    }
+
+    .volume-slider::-moz-range-track {
+      width: 100%;
+      height: 4px;
+      background: var(--spotify-hover);
+      border-radius: 2px;
+    }
+
+    /* Hidden elements */
+    .hidden {
+      display: none;
+    }
+
+    /* Loading spinner */
+    .spinner {
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid transparent;
+      border-top: 2px solid currentColor;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Connection status */
+    .connection-status {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+
+    .connection-status.connected {
+      background-color: rgba(29, 185, 84, 0.2);
+      color: var(--spotify-green);
+    }
+
+    .connection-status.disconnected {
+      background-color: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    /* Icons */
+    .icon {
+      width: 1rem;
+      height: 1rem;
+      fill: currentColor;
+    }
+
+    .icon-lg {
+      width: 1.25rem;
+      height: 1.25rem;
+    }
+
+    /* Queue item states */
+    .song-item {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .song-item.processing {
+      opacity: 0.7;
+      background: linear-gradient(90deg, rgba(29, 185, 84, 0.1) 0%, transparent 100%);
+      animation: shimmer 2s infinite;
+    }
+
+    .song-item.loading {
+      opacity: 0.6;
+      background: linear-gradient(90deg, rgba(29, 185, 84, 0.05) 0%, rgba(29, 185, 84, 0.15) 50%, rgba(29, 185, 84, 0.05) 100%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+
+    .song-item.failed {
+      opacity: 0.5;
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+
+    .track-status {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      font-size: 0.75rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.5rem;
+      font-weight: 500;
+    }
+
+    .track-status.loading {
+      background: rgba(29, 185, 84, 0.2);
+      color: var(--spotify-green);
+    }
+
+    .track-status.processing {
+      background: rgba(249, 115, 22, 0.2);
+      color: #f97316;
+    }
+
+    .track-status.ready {
+      background: rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+    }
+
+    .track-status.failed {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    .status-spinner {
+      width: 0.75rem;
+      height: 0.75rem;
+      border: 1px solid transparent;
+      border-top: 1px solid currentColor;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    /* Current page content styles */
+    .page-title {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+    }
+
+    .section-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+
+    /* Queue section */
+    .queue-section {
+      background-color: var(--spotify-light-gray);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+    }
+
+    .queue-empty {
+      text-align: center;
+      color: var(--spotify-text-subdued);
+      padding: 2rem;
+    }
+
+    /* Alternative URL input */
+    .url-section {
+      background-color: var(--spotify-light-gray);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .url-input {
+      background-color: var(--spotify-gray);
+      color: var(--spotify-text);
+      border: 1px solid var(--spotify-hover);
+      border-radius: 0.375rem;
+      padding: 0.75rem 1rem;
+      width: 100%;
+      margin-bottom: 1rem;
+    }
+
+    .url-input:focus {
+      outline: none;
+      border-color: var(--spotify-green);
+      box-shadow: 0 0 0 2px rgba(29, 185, 84, 0.2);
+    }
+
+    /* Spotify-style notification */
+    .spotify-notification {
+      position: fixed;
+      top: 2rem;
+      right: 2rem;
+      background-color: var(--spotify-green);
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 0.375rem;
+      font-weight: 500;
+      font-size: 0.875rem;
+      z-index: 9999;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      opacity: 0;
+      transform: translateX(20px);
+      transition: all 0.3s ease;
+      max-width: 300px;
+    }
+
+    .spotify-notification.show {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    .spotify-notification.hide {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+
+    /* Playlist mini player inline style */
+    .playlist-mini-player-inline {
+      background: var(--spotify-light-gray);
+      border-radius: 0.5rem;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+
+    /* Mobile header */
+    .mobile-header {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3.5rem;
+      background: var(--spotify-black);
+      border-bottom: 1px solid var(--spotify-gray);
+      z-index: 1000;
+      align-items: center;
+      padding: 0 1rem;
+      justify-content: space-between;
+    }
+
+    .mobile-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--spotify-text);
+    }
+
+    .hamburger-btn {
+      background: none;
+      border: none;
+      color: var(--spotify-text);
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 0.5rem;
+      border-radius: 0.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .hamburger-btn:hover {
+      background: var(--spotify-hover);
+    }
+
+    /* Mobile sidebar overlay */
+    .sidebar-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1001;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+
+    .sidebar-overlay.show {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .sidebar-mobile {
+      position: fixed;
+      top: 0;
+      left: -16rem;
+      width: 16rem;
+      height: 100vh;
+      background: var(--spotify-black);
+      transition: left 0.3s ease;
+      z-index: 1002;
+      overflow-y: auto;
+      border-right: 1px solid var(--spotify-gray);
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .sidebar-mobile.open {
+      left: 0;
+    }
+
+    /* Ensure mobile sidebar only shows on mobile */
+    @media (min-width: 769px) {
+      .mobile-header,
+      .sidebar-overlay,
+      .sidebar-mobile {
+        display: none !important;
+      }
+    }
+
+    /* Responsive design */
+    @media (max-width: 768px) {
+      .mobile-header {
+        display: flex;
+      }
+
+      .main-layout {
+        flex-direction: column;
+        padding-top: 3.5rem;
+      }
+
+      .sidebar {
+        display: none;
+      }
+
+      .content {
+        width: 100%;
+        overflow-x: hidden;
+      }
+
+      .content-header {
+        padding: 1rem;
+        overflow-x: hidden;
+      }
+
+      .content-body {
+        padding: 1rem;
+        overflow-x: hidden;
+      }
+
+      .track-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .track-info {
+        margin-bottom: 0.5rem;
+        width: 100%;
+        overflow: hidden;
+      }
+
+      .track-controls {
+        width: 100%;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+
+      .playlist-mini-player-inline {
+        padding: 0.5rem;
+        margin-bottom: 1rem;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .playlist-mini-player-inline img {
+        width: 2.5rem !important;
+        height: 2.5rem !important;
+      }
+
+      .playlist-mini-player-inline .control-btn {
+        padding: 0.375rem !important;
+      }
+
+      .playlist-mini-player-inline .icon {
+        width: 1rem !important;
+        height: 1rem !important;
+      }
+
+      .playlist-mini-player-inline .volume-slider {
+        min-width: 3rem !important;
+        max-width: 5rem !important;
+      }
+
+      .spotify-notification {
+        right: 1rem;
+        top: 1rem;
+        max-width: calc(100vw - 2rem);
+      }
+
+      /* Ensure all song items fit properly */
+      .song-item {
+        width: 100%;
+        box-sizing: border-box;
+        overflow: hidden;
+        flex-wrap: nowrap;
+      }
+
+      .song-info {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        margin-right: 0.5rem;
+      }
+
+      .song-title {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+
+      .song-artist {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+
+      .song-actions {
+        flex-shrink: 0;
+        display: flex;
+        gap: 0.25rem;
+      }
+
+      /* Ensure song grid doesn't overflow */
+      .song-grid {
+        width: 100%;
+        overflow-x: hidden;
+      }
+
+      /* Page titles should not overflow */
+      .page-title {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .content-header {
+        padding: 0.75rem;
+      }
+
+      .content-body {
+        padding: 0.75rem;
+      }
+
+      .track-item {
+        padding: 0.75rem;
+      }
+
+      .playlist-mini-player-inline {
+        padding: 0.375rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .playlist-mini-player-inline img {
+        width: 2rem !important;
+        height: 2rem !important;
+      }
+
+      .playlist-mini-player-inline .control-btn {
+        padding: 0.25rem !important;
+        min-width: 2rem;
+        height: 2rem;
+      }
+
+      .playlist-mini-player-inline .play-pause-btn {
+        min-width: 2.5rem;
+        height: 2.5rem;
+      }
+
+      .playlist-mini-player-inline .icon {
+        width: 0.875rem !important;
+        height: 0.875rem !important;
+      }
+
+      .playlist-mini-player-inline .volume-slider {
+        min-width: 2.5rem !important;
+        max-width: 4rem !important;
+        margin: 0 0.25rem !important;
+      }
+
+      /* Compact layout for mobile */
+      .playlist-mini-player-inline > div:first-child {
+        margin-bottom: 0.5rem !important;
+      }
+
+      .playlist-mini-player-inline > div:nth-child(2) {
+        margin-bottom: 0.5rem !important;
+      }
+
+      .playlist-mini-player-inline > div:last-child {
+        font-size: 0.625rem !important;
+        margin-top: 0.25rem !important;
+      }
+
+      .page-title {
+        font-size: 1.5rem;
+      }
+
+      .results-title {
+        font-size: 1.25rem;
+      }
+
+      /* Ensure song list is visible */
+      .song-grid {
+        margin-top: 0.5rem;
+      }
+
+      .song-item {
+        padding: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .song-thumbnail {
+        width: 3rem !important;
+        height: 3rem !important;
+      }
+
+      /* Mobile responsive for playlist buttons */
+      .content-body .play-btn,
+      .content-body .queue-btn {
+        padding: 0.75rem !important;
+        min-width: 3rem !important;
+        justify-content: center !important;
+      }
+
+      .playlist-btn-text {
+        display: none !important;
+      }
+
+      .playlist-btn-icon {
+        display: block !important;
+        width: 1.25rem !important;
+        height: 1.25rem !important;
+      }
+
+      /* Stack buttons horizontally with equal spacing */
+      .content-body > .queue-section > div:first-child {
+        justify-content: space-between !important;
+        gap: 0.5rem !important;
+        width: 100%;
+        box-sizing: border-box;
+        flex-wrap: wrap;
+      }
+
+      /* Mobile responsive for individual song buttons */
+      .song-btn-text {
+        display: none !important;
+      }
+
+      .song-btn-icon {
+        display: block !important;
+        width: 1rem !important;
+        height: 1rem !important;
+      }
+
+      .song-play-btn,
+      .song-remove-btn {
+        padding: 0.5rem !important;
+        min-width: 2.5rem !important;
+        height: 2.5rem !important;
+        justify-content: center !important;
+        display: flex !important;
+        align-items: center !important;
+      }
+
+      /* Ultra-mobile optimizations for very small screens */
+      .song-item {
+        padding: 0.375rem !important;
+        gap: 0.375rem !important;
+        flex-direction: row !important;
+        align-items: center !important;
+      }
+
+      .song-thumbnail {
+        width: 2.5rem !important;
+        height: 2.5rem !important;
+        flex-shrink: 0;
+      }
+
+      .song-info {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        margin-right: 0.25rem;
+      }
+
+      .song-title {
+        font-size: 0.875rem !important;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 0.125rem;
+      }
+
+      .song-artist {
+        font-size: 0.75rem !important;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .page-title {
+        font-size: 1.25rem !important;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Ensure containers don't overflow */
+      .app-container,
+      .main-layout,
+      .content,
+      .content-body,
+      .queue-section {
+        max-width: 100vw;
+        overflow-x: hidden;
+        box-sizing: border-box;
+      }
+
+      /* Compact playlist buttons layout */
+      .content-body .play-btn,
+      .content-body .queue-btn {
+        flex: 1;
+        min-width: 0;
+        max-width: calc(33.333% - 0.33rem);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="app-container">
+    <!-- Connection Status -->
+    <div class="connection-status" :class="connected ? 'connected' : 'disconnected'">
+      {{ connected ? '🟢 Conectado' : '🔴 Desconectado' }}
+    </div>
+
+    <!-- Mobile Header -->
+    <div class="mobile-header">
+      <div class="mobile-title">🎵 Music Player</div>
+      <button class="hamburger-btn" @click="toggleMobileMenu">
+        <svg viewBox="0 0 24 24" style="width: 1.5rem; height: 1.5rem;" fill="currentColor">
+          <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Mobile Sidebar Overlay -->
+    <div class="sidebar-overlay" :class="{ 'show': showMobileMenu }" @click="closeMobileMenu"></div>
+
+    <!-- Mobile Sidebar -->
+    <nav class="sidebar-mobile" :class="{ 'open': showMobileMenu }">
+      <div class="sidebar-logo">
+        <h1>🎵 Music Player</h1>
+      </div>
+
+      <div class="sidebar-nav">
+        <a href="#" class="nav-item" :class="{ active: currentPage === 'home' }" @click="setCurrentPageMobile('home')">
+          <svg class="nav-icon" viewBox="0 0 24 24">
+            <path d="M12 2.1l9 8.1v11.8h-6v-7h-6v7H3V10.2l9-8.1z"/>
+          </svg>
+          <span>Inicio</span>
+        </a>
+
+        <a href="#" class="nav-item" :class="{ active: currentPage === 'search' }" @click="setCurrentPageMobile('search')">
+          <svg class="nav-icon" viewBox="0 0 24 24">
+            <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+          </svg>
+          <span>Buscar</span>
+        </a>
+
+        <a href="#" class="nav-item" :class="{ active: currentPage === 'library' }" @click="setCurrentPageMobile('library')">
+          <svg class="nav-icon" viewBox="0 0 24 24">
+            <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/>
+          </svg>
+          <span>Tu biblioteca</span>
+        </a>
+
+        <a href="#" class="nav-item" :class="{ active: currentPage === 'liked' }" @click="setCurrentPageMobile('liked')">
+          <svg class="nav-icon" viewBox="0 0 24 24">
+            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+          </svg>
+          <span>Canciones que te gustan</span>
+        </a>
+
+        <div style="border-top: 1px solid var(--spotify-gray); margin: 1rem 0; padding-top: 1rem;">
+          <h3 style="color: var(--spotify-text-subdued); font-size: 0.875rem; margin-bottom: 0.5rem; padding: 0 1rem;">PLAYLISTS</h3>
+          <div v-if="!playlists.length" style="color: var(--spotify-text-subdued); font-size: 0.875rem; padding: 0 1rem;">
+            No hay playlists
+          </div>
+          <a v-for="playlist in playlists" :key="playlist.id" href="#"
+             class="nav-item"
+             :class="{ active: currentPage === 'playlist' && currentPlaylist && currentPlaylist.id === playlist.id }"
+             @click="setCurrentPlaylistMobile(playlist)">
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/>
+            </svg>
+            <span>{{ playlist.name }}</span>
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="main-layout">
+      <!-- Sidebar -->
+      <nav class="sidebar">
+        <div class="sidebar-logo">
+          <h1>🎵 Music Player</h1>
+          <div style="margin-top: 0.75rem; padding: 0.5rem; background: var(--spotify-gray); border-radius: 0.375rem; cursor: pointer;" @click="showRoomModal = true">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div>
+                <div style="font-size: 0.75rem; color: var(--spotify-text-subdued);">Room actual</div>
+                <div style="font-size: 0.875rem; font-weight: 500;">{{ roomName }}</div>
+              </div>
+              <svg style="width: 1rem; height: 1rem; fill: var(--spotify-text-subdued);" viewBox="0 0 24 24">
+                <path d="M7 10l5 5 5-5z"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-nav">
+          <a href="#" class="nav-item" :class="{ active: currentPage === 'home' }" @click="setCurrentPage('home')">
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path d="M12 2.1l9 8.1v11.8h-6v-7h-6v7H3V10.2l9-8.1z"/>
+            </svg>
+            <span>Inicio</span>
+          </a>
+
+          <a href="#" class="nav-item" :class="{ active: currentPage === 'search' }" @click="setCurrentPage('search')">
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+            </svg>
+            <span>Buscar</span>
+          </a>
+
+          <a href="#" class="nav-item" :class="{ active: currentPage === 'library' }" @click="setCurrentPage('library')">
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/>
+            </svg>
+            <span>Tu biblioteca</span>
+          </a>
+        </div>
+
+        <div class="separator"></div>
+
+        <div style="padding: 0 1.5rem; flex: 1;">
+          <div style="margin-bottom: 1rem;">
+            <h3 style="color: var(--spotify-text-subdued); font-size: 0.875rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">
+              Tu biblioteca
+            </h3>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem; border-radius: 0.375rem; cursor: pointer; transition: background-color 0.2s;" @click="setCurrentPage('library')">
+            <div style="width: 2rem; height: 2rem; background: linear-gradient(135deg, #9333ea, #3b82f6); border-radius: 0.25rem; display: flex; align-items: center; justify-content: center;">
+              <svg style="width: 1rem; height: 1rem; fill: white;" viewBox="0 0 24 24">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+              </svg>
+            </div>
+            <span style="font-size: 0.875rem;">Canciones que te gustan</span>
+          </div>
+
+          <div style="margin: 1rem 0;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+              <h4 style="color: var(--spotify-text-subdued); font-size: 0.875rem; font-weight: 500;">Playlists</h4>
+              <button @click="showCreatePlaylist = true" class="control-btn" style="padding: 0.25rem;">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                </svg>
+              </button>
+            </div>
+
+            <div v-for="playlist in playlists" :key="playlist.id"
+                 style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem; border-radius: 0.375rem; cursor: pointer; transition: background-color 0.2s;"
+                 @click="openPlaylist(playlist)">
+              <div style="width: 2rem; height: 2rem; background: var(--spotify-light-gray); border-radius: 0.25rem; display: flex; align-items: center; justify-content: center;">
+                <svg style="width: 1rem; height: 1rem; fill: var(--spotify-text-subdued);" viewBox="0 0 24 24">
+                  <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/>
+                </svg>
+              </div>
+              <div style="flex: 1; min-width: 0;">
+                <div style="font-size: 0.875rem; color: var(--spotify-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ playlist.name }}</div>
+                <div style="font-size: 0.75rem; color: var(--spotify-text-subdued);">{{ playlist.songs.length }} canciones</div>
+              </div>
+            </div>
+
+            <div v-if="!playlists.length" style="text-align: center; color: var(--spotify-text-subdued); padding: 1rem; font-size: 0.875rem;">
+              <p>No tienes playlists</p>
+              <button @click="showCreatePlaylist = true" style="color: var(--spotify-green); background: none; border: none; cursor: pointer; margin-top: 0.5rem;">
+                Crear tu primera playlist
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <!-- Home Page -->
+        <div v-if="currentPage === 'home'">
+          <div class="content-header">
+            <h1 class="page-title">¡Buenas tardes!</h1>
+          </div>
+
+          <div class="content-body">
+            <!-- Quick Access -->
+            <div v-if="queue.length > 0">
+              <h2 class="section-title">Reproduciendo ahora</h2>
+              <div class="song-item" v-if="state.current" style="background-color: var(--spotify-light-gray); margin-bottom: 2rem;">
+                <img :src="thumb(state.current.id)" :alt="state.current.title" class="song-thumbnail">
+                <div class="song-info">
+                  <div class="song-title">{{ state.current.title }}</div>
+                  <div class="song-artist">{{ state.positionLabel }} / {{ state.durationLabel }}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Queue -->
+            <div class="queue-section">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <h2 class="section-title" style="margin: 0;">Cola de reproducción</h2>
+              <button v-if="queue.length" @click="refreshAllQueueMetadata()"
+                      style="background: var(--spotify-green); color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">
+                🔄 Actualizar títulos
+              </button>
+            </div>
+              <div v-if="!queue.length" class="queue-empty">
+                <p>No hay canciones en la cola</p>
+                <p style="font-size: 0.875rem; margin-top: 0.5rem;">Busca música para empezar a escuchar</p>
+              </div>
+              <div v-else class="song-grid">
+                <div v-for="track in queue" :key="track.id"
+                     class="song-item"
+                     :class="getTrackStateClass(track)">
+                  <img :src="thumb(track.id)" :alt="getDisplayTitle(track)" class="song-thumbnail">
+                  <div class="song-info">
+                    <div class="song-title">{{ getDisplayTitle(track) }}</div>
+                    <div class="song-artist">
+                      <span v-if="track.seconds">{{ mmss(track.seconds) }}</span>
+                      <span v-else style="color: #f59e0b;">
+                        <span class="spinner"></span> Procesando...
+                      </span>
+                    </div>
+                  </div>
+                  <!-- Status indicator -->
+                  <div class="track-status" :class="getTrackStatusClass(track)">
+                    <div v-if="isTrackProcessing(track)" class="status-spinner"></div>
+                    <span>{{ getTrackStatusText(track) }}</span>
+                  </div>
+                  <div class="song-actions">
+                    <button @click="toggleLike(track.id, track.title)"
+                            class="control-btn"
+                            style="color: var(--spotify-text-subdued);">
+                      <svg v-if="isLiked(track.id)" class="icon" style="color: var(--spotify-green);" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                      </svg>
+                      <svg v-else class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Search Page -->
+        <div v-if="currentPage === 'search'">
+          <div class="content-header">
+            <h1 class="page-title">Buscar</h1>
+
+            <div class="search-container">
+              <input
+                v-model="searchQuery"
+                class="search-input"
+                placeholder="¿Qué quieres escuchar?"
+                @keyup.enter="searchMusic"
+              >
+              <button class="search-btn" :disabled="searching" @click="searchMusic">
+                <span v-if="searching" class="spinner"></span>
+                <span v-else>Buscar</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="content-body">
+            <!-- Search Results -->
+            <div v-if="searchResults.length" class="results-section">
+              <div class="results-header">
+                <div>
+                  <h2 class="results-title">Resultados de búsqueda ({{ searchResults.length }})</h2>
+                  <p style="color: var(--spotify-text-subdued); font-size: 0.875rem; margin-top: 0.25rem;">
+                    Página {{ currentSearchPage + 1 }} de {{ totalSearchPages }} • Mostrando {{ paginatedSearchResults.length }} canciones
+                  </p>
+                </div>
+                <button class="close-btn" @click="clearSearch">✕</button>
+              </div>
+
+              <!-- Pagination Controls -->
+              <div style="display: flex; justify-content: center; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                <button @click="prevSearchPage"
+                        :disabled="!hasPrevPage"
+                        class="control-btn"
+                        :style="{ opacity: hasPrevPage ? 1 : 0.5, cursor: hasPrevPage ? 'pointer' : 'not-allowed' }">
+                  <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+                  </svg>
+                </button>
+
+                <span style="color: var(--spotify-text); font-weight: 500; min-width: 120px; text-align: center;">
+                  {{ currentSearchPage + 1 }} / {{ totalSearchPages }}
+                </span>
+
+                <button @click="nextSearchPage"
+                        :disabled="!hasNextPage"
+                        class="control-btn"
+                        :style="{ opacity: hasNextPage ? 1 : 0.5, cursor: hasNextPage ? 'pointer' : 'not-allowed' }">
+                  <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+                  </svg>
+                </button>
+              </div>
+
+              <div class="song-grid">
+                <div v-for="song in paginatedSearchResults" :key="song.id.videoId" class="song-item">
+                  <img :src="song.snippet.thumbnails.medium.url" :alt="song.snippet.title" class="song-thumbnail">
+                  <div class="song-info">
+                    <div class="song-title">{{ song.snippet.title }}</div>
+                    <div class="song-artist">{{ song.snippet.channelTitle }}</div>
+                  </div>
+                  <div class="song-actions">
+                    <button @click="toggleLike(song.id.videoId, song.snippet.title)"
+                            class="control-btn"
+                            style="color: var(--spotify-text-subdued); margin-right: 0.5rem;">
+                      <svg v-if="isLiked(song.id.videoId)" class="icon" style="color: var(--spotify-green);" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                      </svg>
+                      <svg v-else class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                      </svg>
+                    </button>
+
+                    <!-- Playlist dropdown -->
+                    <div style="position: relative; display: inline-block;">
+                      <button @click.stop="togglePlaylistDropdown(song)" class="control-btn" style="margin-right: 0.5rem;">
+                        <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"/>
+                        </svg>
+                      </button>
+
+                      <div v-show="song._showPlaylists" style="position: absolute; top: 100%; left: 0; background: var(--spotify-light-gray); border-radius: 0.375rem; padding: 0.5rem; min-width: 150px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                        <div v-if="!playlists.length" style="color: var(--spotify-text-subdued); font-size: 0.75rem; text-align: center; padding: 0.5rem;">
+                          <p>No hay playlists</p>
+                          <button @click.stop="showCreatePlaylist = true; song._showPlaylists = false" style="color: var(--spotify-green); background: none; border: none; cursor: pointer; margin-top: 0.25rem; font-size: 0.75rem;">
+                            Crear playlist
+                          </button>
+                        </div>
+                        <div v-else>
+                          <div v-for="playlist in playlists" :key="playlist.id"
+                               @click.stop="addToPlaylist(playlist.id, song.id.videoId, song.snippet.title); song._showPlaylists = false"
+                               style="padding: 0.5rem; cursor: pointer; border-radius: 0.25rem; transition: background-color 0.2s; font-size: 0.75rem; color: var(--spotify-text);"
+                               @mouseover="$event.target.style.backgroundColor = 'var(--spotify-hover)'"
+                               @mouseout="$event.target.style.backgroundColor = 'transparent'">
+                            {{ playlist.name }}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button class="play-btn" @click="playNow(song.id.videoId)">
+                      ▶ Reproducir
+                    </button>
+                    <button class="queue-btn" @click="addToQueue(song.id.videoId, song)">
+                      + Cola
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Alternative URL Input -->
+            <div class="url-section">
+              <h3 style="margin-bottom: 1rem; font-weight: 600;">O agregar por URL de YouTube</h3>
+              <input
+                v-model="urlOrId"
+                class="url-input"
+                placeholder="https://www.youtube.com/watch?v=..."
+                @keyup.enter="addAndEnqueue"
+              >
+              <button class="search-btn" :disabled="busy" @click="addAndEnqueue" style="width: 100%;">
+                <span v-if="busy" class="spinner"></span>
+                <span v-else>Agregar a cola</span>
+              </button>
+              <div v-if="adding.length" style="margin-top: 1rem; font-size: 0.875rem; color: var(--spotify-text-subdued);">
+                <span>📥 Descargando:</span>
+                <span v-for="(x,i) in adding" :key="i" style="margin-left: 0.5rem; background-color: var(--spotify-hover); padding: 0.25rem 0.5rem; border-radius: 0.25rem;">{{ x.show }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Library Page -->
+        <div v-if="currentPage === 'library'">
+          <div class="content-header">
+            <h1 class="page-title">Tu biblioteca</h1>
+          </div>
+
+          <div class="content-body">
+            <div class="queue-section">
+              <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                <div style="width: 4rem; height: 4rem; background: linear-gradient(135deg, #9333ea, #3b82f6); border-radius: 0.5rem; display: flex; align-items: center; justify-content: center;">
+                  <svg style="width: 2rem; height: 2rem; fill: white;" viewBox="0 0 24 24">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                  </svg>
+                </div>
+                <div>
+                  <h2 class="section-title" style="margin-bottom: 0.25rem;">Canciones que te gustan</h2>
+                  <p style="color: var(--spotify-text-subdued); font-size: 0.875rem;">{{ likedSongs.length }} canciones guardadas</p>
+                </div>
+              </div>
+
+              <div v-if="!likedSongs.length" class="queue-empty">
+                <p>No has guardado canciones aún</p>
+                <p style="font-size: 0.875rem; margin-top: 0.5rem;">Usa el corazón ♡ para guardar tus favoritas</p>
+              </div>
+
+              <div v-else class="song-grid">
+                <div v-for="(song, index) in likedSongs" :key="song.id" class="song-item">
+                  <img :src="song.thumbnail" :alt="song.title" class="song-thumbnail">
+                  <div class="song-info">
+                    <div class="song-title">{{ song.title }}</div>
+                    <div class="song-artist">Agregada {{ formatDate(song.addedAt) }}</div>
+                  </div>
+                  <div class="song-actions">
+                    <button class="play-btn" @click="playLikedSong(song.id)">
+                      ▶ Reproducir
+                    </button>
+                    <button class="close-btn" @click="removeLikedSong(song.id)" style="margin-left: 0.5rem; color: var(--spotify-text-subdued);">
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Playlist Page -->
+        <div v-if="currentPage === 'playlist' && currentPlaylist">
+          <div class="content-header">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+              <button @click="setCurrentPage('library')" class="control-btn">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+                </svg>
+              </button>
+              <div>
+                <h1 class="page-title">{{ currentPlaylist.name }}</h1>
+                <p style="color: var(--spotify-text-subdued); font-size: 0.875rem;">{{ currentPlaylist.songs.length }} canciones</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="content-body">
+            <div class="queue-section">
+              <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                <button v-if="currentPlaylist.songs.length" @click="playPlaylist(currentPlaylist)"
+                        class="play-btn playlist-play-btn" style="padding: 0.75rem 1.5rem; font-size: 1rem;">
+                  <svg class="icon playlist-btn-icon" style="display: none;" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                  <span class="playlist-btn-text">▶ Reproducir playlist</span>
+                </button>
+                <button v-if="currentPlaylist.songs.length" @click="shufflePlayPlaylist(currentPlaylist)"
+                        class="play-btn playlist-shuffle-btn" style="padding: 0.75rem 1.5rem; font-size: 1rem; background: var(--spotify-light-gray); color: var(--spotify-text);">
+                  <svg class="icon playlist-btn-icon" style="display: none;" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M14.83 13.41L13.42 12L20 5.41L18.59 4l-6.58 6.59L5.41 4L4 5.41l6.59 6.59L4 18.59L5.41 20l6.59-6.59L18.59 20L20 18.59z"/>
+                  </svg>
+                  <span class="playlist-btn-text">🔀 Aleatorio</span>
+                </button>
+                <button @click="deletePlaylist(currentPlaylist.id)"
+                        class="queue-btn playlist-delete-btn" style="color: #ef4444; border-color: #ef4444;">
+                  <svg class="icon playlist-btn-icon" style="display: none;" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                  </svg>
+                  <span class="playlist-btn-text">🗑️ Eliminar</span>
+                </button>
+              </div>
+
+              <!-- Playlist Mini Player positioned below song count -->
+              <div v-if="playlistPlayer.audio && getCurrentPlaylistSong()" class="playlist-mini-player-inline">
+                <!-- Audio Spectrum Visualizer -->
+                <div style="margin-bottom: 1rem; background: var(--spotify-gray); border-radius: 0.5rem; padding: 1rem;">
+                  <canvas ref="playlistSpectrumCanvas"
+                          width="800"
+                          height="120"
+                          style="width: 100%; height: 120px; display: block; border-radius: 0.25rem;"></canvas>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+                  <img :src="getCurrentPlaylistSong().thumbnail"
+                       :alt="getCurrentPlaylistSong().title"
+                       style="width: 3rem; height: 3rem; border-radius: 0.25rem; object-fit: cover;">
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 0.875rem; font-weight: 500; color: var(--spotify-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                      {{ getCurrentPlaylistSong().title }}
+                    </div>
+                    <div style="font-size: 0.75rem; color: var(--spotify-text-subdued);">
+                      {{ getCurrentPlaylistSong().channel || 'Desconocido' }}
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Compact controls: prev, play, next + volume in one line -->
+                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+                  <button @click="prevPlaylistSong()" class="control-btn">
+                    <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+                    </svg>
+                  </button>
+
+                  <button @click="playlistPlayer.isPlaying ? pausePlaylist() : resumePlaylist()"
+                          class="control-btn play-pause-btn">
+                    <svg v-if="playlistPlayer.isPlaying" class="icon" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                    </svg>
+                    <svg v-else class="icon" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
+                  </button>
+
+                  <button @click="nextPlaylistSong()" class="control-btn">
+                    <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+                    </svg>
+                  </button>
+
+                  <!-- Volume control in same line -->
+                  <button @click="togglePlaylistMute()" class="control-btn" style="padding: 0.25rem; margin-left: 0.5rem;">
+                    <svg v-if="!playlistPlayer.isMuted && playlistPlayer.volume > 0.5" class="icon" style="width: 1rem; height: 1rem;" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                    </svg>
+                    <svg v-else-if="!playlistPlayer.isMuted && playlistPlayer.volume > 0" class="icon" style="width: 1rem; height: 1rem;" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/>
+                    </svg>
+                    <svg v-else class="icon" style="width: 1rem; height: 1rem;" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/>
+                    </svg>
+                  </button>
+
+                  <input type="range"
+                         min="0"
+                         max="1"
+                         step="0.01"
+                         :value="playlistPlayer.isMuted ? 0 : playlistPlayer.volume"
+                         @input="setPlaylistVolume($event.target.value)"
+                         class="volume-slider"
+                         style="flex: 1; cursor: pointer; margin: 0 0.5rem;">
+
+                  <span style="font-size: 0.75rem; color: var(--spotify-text-subdued); min-width: 3rem; text-align: center;">
+                    {{ Math.round((playlistPlayer.isMuted ? 0 : playlistPlayer.volume) * 100) }}%
+                  </span>
+                </div>
+
+                <!-- Progress bar with seek functionality -->
+                <div style="margin-bottom: 0.5rem;">
+                  <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--spotify-text-subdued);">
+                    <span style="min-width: 2.5rem; text-align: right;">{{ mmss(playlistPlayer.currentTime) }}</span>
+                    <div @click="seekPlaylistAudio($event)"
+                         style="flex: 1; height: 0.25rem; background: var(--spotify-light-gray); border-radius: 0.125rem; cursor: pointer; position: relative;">
+                      <div :style="{
+                        width: playlistPlayer.duration ? (playlistPlayer.currentTime / playlistPlayer.duration * 100) + '%' : '0%',
+                        height: '100%',
+                        background: 'var(--spotify-green)',
+                        borderRadius: '0.125rem',
+                        transition: 'width 0.1s'
+                      }"></div>
+                    </div>
+                    <span style="min-width: 2.5rem;">{{ mmss(playlistPlayer.duration) }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="!currentPlaylist.songs.length" class="queue-empty">
+                <p>Esta playlist está vacía</p>
+                <p style="font-size: 0.875rem; margin-top: 0.5rem;">Busca música y agrégala usando el botón de playlist</p>
+              </div>
+
+              <div v-else class="song-grid">
+                <div v-for="(song, index) in currentPlaylist.songs" :key="`${song.id}-${index}`" class="song-item">
+                  <img :src="song.thumbnail" :alt="song.title" class="song-thumbnail">
+                  <div class="song-info">
+                    <div class="song-title">{{ song.title }}</div>
+                    <div class="song-artist" style="display: flex; align-items: center; gap: 0.5rem;">
+                      <span>Agregada {{ formatDate(song.addedAt) }}</span>
+                      <span :style="{
+                        color: getPlaylistSongStatusColor(song.id),
+                        fontSize: '0.65rem',
+                        fontWeight: '500'
+                      }">
+                        {{ getPlaylistSongStatusText(song.id) }}
+                      </span>
+                    </div>
+                  </div>
+                  <div class="song-actions">
+                    <button class="play-btn song-play-btn" @click="playPlaylist(currentPlaylist, index)"
+                            :disabled="!isPlaylistSongReady(song.id)"
+                            :style="{ opacity: !isPlaylistSongReady(song.id) ? '0.5' : '1', cursor: !isPlaylistSongReady(song.id) ? 'not-allowed' : 'pointer' }">
+                      <svg class="icon song-btn-icon" style="display: none;" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8 5v14l11-7z"/>
+                      </svg>
+                      <span class="song-btn-text">▶ Reproducir</span>
+                    </button>
+                    <button class="close-btn song-remove-btn" @click="removeFromPlaylist(currentPlaylist.id, song.id)" style="margin-left: 0.5rem; color: var(--spotify-text-subdued);">
+                      <svg class="icon song-btn-icon" style="display: none;" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                      </svg>
+                      <span class="song-btn-text">✕</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Audio Player -->
+    <div class="player">
+      <div class="player-info">
+        <img v-if="state.current" :src="thumb(state.current.id)" :alt="state.current.title" class="current-track-thumbnail">
+        <div v-else style="width: 3.5rem; height: 3.5rem; background-color: var(--spotify-hover); border-radius: 0.375rem;"></div>
+
+        <div class="current-track-info">
+          <div class="current-track-title">
+            {{ state.current ? state.current.title : '—' }}
+            <span v-if="state.current" style="font-size: 0.7rem; margin-left: 0.5rem; opacity: 0.7;">
+              {{
+                isMobile ? '📱' :
+                isUsingYouTubePlayer ? '📺' :
+                (hasAdBlocker ? '🚫📺' : '🎵')
+              }}
+            </span>
+          </div>
+          <div class="current-track-time">{{ state.positionLabel }} / {{ state.durationLabel }}</div>
+          <!-- Barra de progreso interactiva -->
+          <div v-if="state.current && state.duration > 0"
+               @click="seekToPosition($event)"
+               style="width: 100%; height: 4px; background: var(--spotify-hover); border-radius: 2px; margin-top: 0.5rem; cursor: pointer; position: relative;">
+            <div :style="{
+              width: (state.position / state.duration * 100) + '%',
+              height: '100%',
+              background: 'var(--spotify-green)',
+              borderRadius: '2px',
+              transition: 'width 0.1s linear'
+            }"></div>
+          </div>
+        </div>
+
+        <div v-if="state.current" style="margin-left: 1rem;">
+          <button @click="toggleLike(state.current.id, state.current.title)"
+                  class="control-btn"
+                  style="color: var(--spotify-text-subdued);">
+            <svg v-if="isLiked(state.current.id)" class="icon" style="color: var(--spotify-green);" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+            <svg v-else class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="player-controls">
+        <button class="control-btn" @click="wsSend('player:play', {})">
+          <svg class="icon" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        </button>
+
+        <button class="control-btn play-pause-btn" @click="wsSend('player:pause', {})">
+          <svg class="icon" viewBox="0 0 24 24">
+            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+          </svg>
+        </button>
+
+        <button class="control-btn" @click="wsSend('player:next', {})">
+          <svg class="icon" viewBox="0 0 24 24">
+            <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="player-volume">
+        <button @click="toggleMute" class="control-btn">
+          <svg v-if="muted || volume === 0" class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+          </svg>
+          <svg v-else-if="volume < 0.3" class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M7 9v6h4l5 5V4l-5 5H7z"/>
+          </svg>
+          <svg v-else-if="volume < 0.7" class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/>
+          </svg>
+          <svg v-else class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+          </svg>
+        </button>
+
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          :value="volume"
+          @input="setVolume($event.target.value)"
+          class="volume-slider"
+        >
+
+        <span style="color: var(--spotify-text-subdued); font-size: 0.75rem; min-width: 30px; text-align: center;">
+          {{ Math.round(volume * 100) }}%
+        </span>
+      </div>
+    </div>
+
+    <!-- Hidden Audio Element -->
+    <audio id="audio" :src="audioSrc" preload="auto" playsinline class="hidden"></audio>
+
+    <!-- Create Playlist Modal -->
+    <!-- Room selector modal -->
+    <div v-if="showRoomModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000;" @click="showRoomModal = false">
+      <div @click.stop style="background: var(--spotify-light-gray); border-radius: 0.5rem; padding: 2rem; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;">
+        <h2 style="margin-bottom: 1.5rem; color: var(--spotify-text);">Rooms Disponibles</h2>
+
+        <!-- Lista de rooms -->
+        <div style="margin-bottom: 1.5rem;">
+          <div v-for="room in availableRooms" :key="room.id"
+               style="padding: 1rem; background: var(--spotify-gray); border-radius: 0.375rem; margin-bottom: 0.5rem; cursor: pointer; transition: background 0.2s; display: flex; justify-content: space-between; align-items: center;"
+               :style="{ background: currentRoom === room.id ? 'var(--spotify-green)' : 'var(--spotify-gray)' }">
+            <div @click="switchRoom(room.id); showRoomModal = false" style="flex: 1;">
+              <div style="font-weight: 500;">
+                {{ room.name }}
+                <span v-if="!room.is_public" style="margin-left: 0.5rem;">🔒</span>
+              </div>
+              <div style="font-size: 0.75rem; color: var(--spotify-text-subdued); margin-top: 0.25rem;">ID: {{ room.id }}</div>
+            </div>
+            <button v-if="room.created_by === userId && room.id !== 'default'"
+                    @click.stop="deleteRoom(room.id)"
+                    style="background: var(--spotify-red); color: white; border: none; border-radius: 50%; width: 2rem; height: 2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;"
+                    title="Eliminar room">
+              🗑️
+            </button>
+          </div>
+
+          <div v-if="availableRooms.length === 0" style="text-align: center; color: var(--spotify-text-subdued); padding: 2rem;">
+            No hay rooms disponibles
+          </div>
+        </div>
+
+        <!-- Crear nueva room -->
+        <div style="border-top: 1px solid var(--spotify-hover); padding-top: 1.5rem;">
+          <h3 style="margin-bottom: 1rem; color: var(--spotify-text);">Crear Nueva Room</h3>
+
+          <input
+            v-model="newRoomName"
+            placeholder="Nombre de la room"
+            style="width: 100%; background: var(--spotify-gray); color: var(--spotify-text); border: 1px solid var(--spotify-hover); border-radius: 0.375rem; padding: 0.75rem; margin-bottom: 1rem;">
+
+          <!-- Toggle Público/Privado -->
+          <div style="margin-bottom: 1rem; padding: 0.75rem; background: var(--spotify-gray); border-radius: 0.375rem;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--spotify-text);">
+              <input type="radio" v-model="newRoomIsPublic" :value="true" name="roomType" style="cursor: pointer;">
+              <span>🌍 Pública (sin contraseña)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--spotify-text); margin-top: 0.5rem;">
+              <input type="radio" v-model="newRoomIsPublic" :value="false" name="roomType" style="cursor: pointer;">
+              <span>🔒 Privada (con contraseña)</span>
+            </label>
+          </div>
+
+          <!-- Campo de contraseña (solo si es privada) -->
+          <div v-if="!newRoomIsPublic" style="margin-bottom: 1rem;">
+            <input
+              v-model="newRoomPassword"
+              type="password"
+              placeholder="Contraseña de la room"
+              style="width: 100%; background: var(--spotify-gray); color: var(--spotify-text); border: 1px solid var(--spotify-green); border-radius: 0.375rem; padding: 0.75rem;">
+            <p style="font-size: 0.75rem; color: var(--spotify-text-subdued); margin-top: 0.5rem;">
+              💡 Comparte esta contraseña con otros para que accedan a tu room
+            </p>
+          </div>
+
+          <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+            <button @click="showRoomModal = false" class="queue-btn">
+              Cerrar
+            </button>
+            <button @click="createRoom"
+                    :disabled="!newRoomName.trim() || (!newRoomIsPublic && !newRoomPassword.trim())"
+                    class="play-btn"
+                    :style="{ opacity: (newRoomName.trim() && (newRoomIsPublic || newRoomPassword.trim())) ? 1 : 0.5 }">
+              Crear Room
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create playlist modal -->
+    <div v-if="showCreatePlaylist" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000;">
+      <div style="background: var(--spotify-light-gray); border-radius: 0.5rem; padding: 2rem; max-width: 400px; width: 90%;">
+        <h2 style="margin-bottom: 1.5rem; color: var(--spotify-text);">Crear nueva playlist</h2>
+
+        <input
+          v-model="newPlaylistName"
+          @keyup.enter="createNewPlaylist"
+          placeholder="Nombre de la playlist"
+          style="width: 100%; background: var(--spotify-gray); color: var(--spotify-text); border: 1px solid var(--spotify-hover); border-radius: 0.375rem; padding: 0.75rem; margin-bottom: 1.5rem;"
+          autofocus>
+
+        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+          <button @click="showCreatePlaylist = false; newPlaylistName = ''"
+                  class="queue-btn">
+            Cancelar
+          </button>
+          <button @click="createNewPlaylist"
+                  :disabled="!newPlaylistName.trim()"
+                  class="play-btn"
+                  :style="{ opacity: newPlaylistName.trim() ? 1 : 0.5 }">
+            Crear
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- YouTube Player (oculto) -->
+    <div id="youtube-player-container" style="position: absolute; top: -9999px; left: -9999px; width: 1px; height: 1px; overflow: hidden;">
+      <div id="youtube-player"></div>
+    </div>
+
+    <!-- Audio element para fallback -->
+    <audio
+      ref="audioPlayer"
+      @timeupdate="onAudioTimeUpdate"
+      @ended="onAudioEnded"
+      @loadedmetadata="onAudioLoaded"
+      @error="onAudioError"
+      :controls="isMobile"
+      preload="none"
+      :style="{
+        display: isMobile && currentAudioUrl ? 'block' : 'none',
+        width: isMobile ? '100%' : 'auto',
+        marginTop: isMobile ? '1rem' : '0'
+      }">
+    </audio>
+
+    <!-- Elemento audio original para compatibilidad -->
+    <audio id="audio" controls style="display: none;"></audio>
+
+    <!-- Spotify-style notification -->
+    <div ref="notification" class="spotify-notification">
+      {{ notificationMessage }}
+    </div>
+  </div>
+
+<script>
+new Vue({
+  el: '#app',
+  data: {
+    // Navigation
+    currentPage: 'home',
+    showMobileMenu: false,
+
+    // Original data properties
+    urlOrId: '',
+    busy: false,
+    adding: [],
+    ws: null,
+    connected: false,
+    state: { current: null, position: 0, positionLabel: '0:00', duration: 0, durationLabel: '0:00', playing: false },
+    queue: [],
+
+    // Registro de videos no embeddables para evitar bucles infinitos
+    nonEmbeddableVideos: new Set(),
+
+    // Registro de metadata ya preservada para evitar repeticiones
+    preservedMetadata: new Map(),
+    volume: Number(localStorage.getItem('vol') ?? 0.8),
+    muted: localStorage.getItem('muted') === 'true',
+    rate: Number(localStorage.getItem('rate') ?? 1),
+    needUserGesture: false,
+    pollTimer: null,
+
+    // Rooms system
+    currentRoom: localStorage.getItem('currentRoom') || 'default',
+    userId: localStorage.getItem('userId') || (() => {
+      const id = 'user_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('userId', id);
+      return id;
+    })(),
+    availableRooms: [],
+    showRoomModal: false,
+    newRoomName: '',
+    newRoomIsPublic: true,
+    newRoomPassword: '',
+    roomName: 'Default Room',
+    sessionToken: localStorage.getItem('sessionToken') || null,
+
+    // Hybrid Player System
+    playerMode: 'hybrid', // 'youtube', 'audio', 'hybrid'
+    youtubePlayer: null,
+    youtubePlayerReady: false,
+    currentAudioUrl: null,
+    isUsingYouTubePlayer: false,
+    hasAdBlocker: false,
+    youtubePositionInterval: null,
+    isMobile: false,
+    userInteracted: false,
+
+    // Search properties
+    searchQuery: '',
+    searching: false,
+    searchResults: [],
+    searchResultsPerPage: 10,
+    currentSearchPage: 0,
+
+    // Liked songs
+    likedSongs: JSON.parse(localStorage.getItem('likedSongs') || '[]'),
+
+    // Playlists system
+    playlists: JSON.parse(localStorage.getItem('userPlaylists') || '[]'),
+    currentPlaylist: null,
+    playlistPlayer: {
+      currentIndex: 0,
+      isPlaying: false,
+      audio: null,
+      currentTime: 0,
+      duration: 0,
+      volume: 0.8,
+      isMuted: false,
+      // Audio visualizer
+      audioContext: null,
+      analyser: null,
+      dataArray: null,
+      animationId: null
+    },
+    showCreatePlaylist: false,
+    newPlaylistName: '',
+
+    // Track readiness cache
+    readinessCache: new Map(),
+
+    // Track songs being downloaded for playlists
+    downloadingPlaylistSongs: {},
+    checkDownloadInterval: null,
+
+    // Notification message
+    notificationMessage: ''
+  },
+
+  computed: {
+    audioSrc() {
+      // Si estamos usando YouTube Player O si el track está en modo híbrido, no usar audio element del servidor
+      if (this.isUsingYouTubePlayer) {
+        console.log('[AUDIO] audioSrc empty - using YouTube Player');
+        return '';
+      }
+      // También verificar si el track actual está en modo híbrido (para arquitectura serverless)
+      if (this.state.current && (this.state.current.mode === 'hybrid' || this.state.current.mode === 'lightweight')) {
+        console.log(`[AUDIO] audioSrc empty - track mode: ${this.state.current.mode}`);
+        return '';
+      }
+      const src = this.state.current ? `/stream/${this.state.current.id}` : '';
+      console.log(`[AUDIO] audioSrc: ${src}`);
+      return src;
+    },
+
+    paginatedSearchResults() {
+      const start = this.currentSearchPage * this.searchResultsPerPage;
+      const end = start + this.searchResultsPerPage;
+      return this.searchResults.slice(start, end);
+    },
+
+    totalSearchPages() {
+      return Math.ceil(this.searchResults.length / this.searchResultsPerPage);
+    },
+
+    hasNextPage() {
+      return this.currentSearchPage < this.totalSearchPages - 1;
+    },
+
+    hasPrevPage() {
+      return this.currentSearchPage > 0;
+    }
+  },
+
+  methods: {
+    // Navigation
+    setCurrentPage(page) {
+      this.currentPage = page;
+    },
+
+    // Obtener título a mostrar (preferir título real actualizado)
+    getDisplayTitle(track) {
+      // Primero verificar si tenemos metadata preservada para este track
+      const preserved = this.preservedMetadata.get(track.id);
+      if (preserved && preserved.title && !preserved.failed) {
+        return preserved.title;
+      }
+
+      // Si es el track actual y tenemos título real, usar ese
+      if (this.state.current && this.state.current.id === track.id &&
+          this.state.current.title && !this.state.current.title.startsWith('YouTube Video')) {
+        return this.state.current.title;
+      }
+
+      // Si el track tiene título actualizado (no placeholder), usarlo
+      if (track.title && !track.title.startsWith('YouTube Video')) {
+        return track.title;
+      }
+
+      // Si llegamos aquí y no tenemos metadata, intentar obtenerla automáticamente
+      if (!preserved || preserved.failed) {
+        this.fetchSingleTrackMetadata(track.id);
+      }
+
+      // Por último, usar placeholder
+      return `YouTube Video ${track.id}`;
+    },
+
+    // Función para obtener metadata de un solo track
+    async fetchSingleTrackMetadata(trackId) {
+      // Evitar múltiples requests para el mismo track
+      if (this.preservedMetadata.has(trackId)) {
+        const existing = this.preservedMetadata.get(trackId);
+        if (existing.processing || (existing.title && !existing.failed)) {
+          return;
+        }
+      }
+
+      console.log(`[METADATA-FETCH] Getting metadata for single track: ${trackId}`);
+
+      // Marcar como procesando
+      this.preservedMetadata.set(trackId, { processing: true });
+
+      try {
+        const response = await fetch(`/api/metadata/${trackId}`);
+        const metadata = await response.json();
+
+        if (metadata && metadata.title && !metadata.error) {
+          // Actualizar metadata preservada
+          this.preservedMetadata.set(trackId, {
+            title: metadata.title,
+            duration: metadata.duration
+          });
+
+          // Actualizar el track en la cola si existe
+          const queueTrack = this.queue.find(t => t.id === trackId);
+          if (queueTrack) {
+            queueTrack.title = metadata.title;
+            if (metadata.duration && metadata.duration > 0) {
+              queueTrack.seconds = metadata.duration;
+            }
+          }
+
+          // Forzar actualización de Vue
+          this.$forceUpdate();
+
+          console.log(`[METADATA-FETCH] Successfully updated: ${trackId} -> ${metadata.title}`);
+        } else {
+          // Marcar como fallido
+          this.preservedMetadata.set(trackId, {
+            title: `YouTube Video ${trackId}`,
+            failed: true,
+            error: metadata.error || 'No metadata available'
+          });
+        }
+      } catch (error) {
+        console.warn(`[METADATA-FETCH] Error for ${trackId}:`, error);
+        this.preservedMetadata.set(trackId, {
+          title: `YouTube Video ${trackId}`,
+          failed: true,
+          error: error.message
+        });
+      }
+    },
+
+    // Función para refrescar metadata de toda la cola
+    refreshAllQueueMetadata() {
+      console.log('[METADATA-REFRESH] Refreshing metadata for all queue items');
+      this.queue.forEach(track => {
+        if (track.title.startsWith('YouTube Video')) {
+          this.fetchSingleTrackMetadata(track.id);
+        }
+      });
+    },
+
+    // === HYBRID PLAYER SYSTEM ===
+
+    // Inicializar YouTube Player
+    initYouTubePlayer() {
+      console.log(`[HYBRID] Initializing YouTube Player - Mobile: ${this.isMobile}, YT available: ${typeof YT !== 'undefined'}`);
+
+      if (typeof YT !== 'undefined' && YT.Player) {
+        const playerElement = document.getElementById('youtube-player');
+        console.log(`[HYBRID] Player element found: ${playerElement !== null}`);
+
+        this.youtubePlayer = new YT.Player('youtube-player', {
+          height: '1',
+          width: '1',
+          playerVars: {
+            autoplay: 0,
+            controls: 0,
+            disablekb: 1,
+            fs: 0,
+            iv_load_policy: 3,
+            modestbranding: 1,
+            playsinline: 1,
+            rel: 0,
+            showinfo: 0
+          },
+          events: {
+            onReady: this.onYouTubePlayerReady,
+            onStateChange: this.onYouTubePlayerStateChange,
+            onError: this.onYouTubePlayerError
+          }
+        });
+      }
+    },
+
+    // Detectar dispositivo móvil
+    detectMobileDevice() {
+      const userAgent = navigator.userAgent.toLowerCase();
+      const mobileKeywords = ['mobile', 'android', 'iphone', 'ipad', 'ipod', 'blackberry', 'windows phone'];
+
+      this.isMobile = mobileKeywords.some(keyword => userAgent.includes(keyword)) ||
+                     window.innerWidth <= 768 ||
+                     ('ontouchstart' in window);
+
+      console.log(`[HYBRID] Mobile device detected: ${this.isMobile}`);
+      return this.isMobile;
+    },
+
+    // Detectar bloqueador de anuncios
+    async detectAdBlocker() {
+      try {
+        // Crear un elemento que los bloqueadores de anuncios típicamente bloquean
+        const testAd = document.createElement('div');
+        testAd.innerHTML = '&nbsp;';
+        testAd.className = 'adsbox';
+        testAd.style.position = 'absolute';
+        testAd.style.left = '-10000px';
+        document.body.appendChild(testAd);
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        this.hasAdBlocker = testAd.offsetHeight === 0;
+        document.body.removeChild(testAd);
+
+        console.log(`[HYBRID] Ad blocker detected: ${this.hasAdBlocker}`);
+      } catch (e) {
+        console.warn('[HYBRID] Could not detect ad blocker:', e);
+      }
+    },
+
+    // Configurar gestión de interacción del usuario para móviles
+    setupUserInteractionHandlers() {
+      if (this.isMobile) {
+        const events = ['touchstart', 'touchend', 'click', 'tap'];
+        const handleInteraction = () => {
+          if (!this.userInteracted) {
+            this.userInteracted = true;
+            console.log('[HYBRID] User interaction detected on mobile');
+
+            // Remover listeners después de la primera interacción
+            events.forEach(event => {
+              document.removeEventListener(event, handleInteraction);
+            });
+          }
+        };
+
+        events.forEach(event => {
+          document.addEventListener(event, handleInteraction, { passive: true });
+        });
+      } else {
+        this.userInteracted = true; // Desktop no necesita interacción previa
+      }
+    },
+
+    // Reproducir usando el sistema híbrido
+    async playHybrid(videoId) {
+      console.log(`[HYBRID] Playing ${videoId} - Mobile: ${this.isMobile}, UserInteracted: ${this.userInteracted}`);
+
+      // Verificar si este video ya falló con error 150 (no embeddable)
+      if (this.nonEmbeddableVideos.has(videoId)) {
+        console.log(`[HYBRID] Video ${videoId} is known to be non-embeddable, skipping YouTube Player`);
+        // Ir directamente al fallback de audio
+        if (this.isMobile) {
+          return await this.playMobileAudio(videoId);
+        } else {
+          return await this.playServerAudio(videoId);
+        }
+      }
+
+      // PRIORIDAD 1: Intentar YouTube Player siempre (móvil y desktop)
+      if (this.youtubePlayerReady && this.youtubePlayer) {
+        console.log(`[HYBRID] Using YouTube Player for ${videoId} (Mobile: ${this.isMobile})`);
+        try {
+          this.isUsingYouTubePlayer = true;
+
+          // Actualizar título inmediatamente
+          if (this.state.current && this.state.current.id === videoId) {
+            console.log(`[HYBRID] Using existing metadata for ${videoId}`);
+          } else {
+            this.state.current = {
+              id: videoId,
+              title: 'Cargando desde YouTube...'
+            };
+          }
+
+          this.youtubePlayer.loadVideoById(videoId);
+          this.youtubePlayer.playVideo();
+          console.log(`[HYBRID] Using YouTube Player for ${videoId}`);
+          return true;
+        } catch (e) {
+          console.warn('[HYBRID] YouTube Player failed, falling back to audio:', e);
+          this.isUsingYouTubePlayer = false;
+        }
+      }
+
+      // PRIORIDAD 2: Fallback para móviles - usar audio nativo solo si es necesario
+      if (this.isMobile) {
+        console.log(`[HYBRID] YouTube Player not ready on mobile, using native audio fallback for ${videoId}`);
+        return await this.playMobileAudio(videoId);
+      }
+
+      // PRIORIDAD 3: Fallback para desktop - intentar obtener URL directa del servidor
+      console.log(`[HYBRID] YouTube Player not ready on desktop, using server audio fallback for ${videoId}`);
+      return await this.playServerAudio(videoId);
+    },
+
+    // Reproducción específica para móviles
+    async playMobileAudio(videoId) {
+      try {
+        this.isUsingYouTubePlayer = false;
+
+        // Verificar si necesitamos interacción del usuario
+        if (!this.userInteracted) {
+          console.log('[HYBRID] Waiting for user interaction on mobile...');
+          this.showMobilePlayButton(videoId);
+          return false;
+        }
+
+        console.log('[HYBRID] Attempting mobile audio playback...');
+
+        // Intentar obtener stream del servidor
+        const response = await fetch(`/stream/${videoId}`, { method: 'HEAD' });
+
+        if (response.ok) {
+          this.currentAudioUrl = `/stream/${videoId}`;
+          this.$refs.audioPlayer.src = this.currentAudioUrl;
+
+          // Configurar para móviles
+          this.$refs.audioPlayer.load();
+          await this.$refs.audioPlayer.play();
+
+          console.log(`[HYBRID] Mobile audio playback successful for ${videoId}`);
+          return true;
+        } else {
+          // Fallback: abrir en YouTube app
+          console.log('[HYBRID] Server stream failed, offering YouTube app option');
+          this.showYouTubeAppOption(videoId);
+          return false;
+        }
+      } catch (e) {
+        console.warn('[HYBRID] Mobile audio failed:', e);
+        // Último recurso: YouTube app
+        this.showYouTubeAppOption(videoId);
+        return false;
+      }
+    },
+
+    // Reproducción de audio del servidor
+    async playServerAudio(videoId) {
+      try {
+        this.isUsingYouTubePlayer = false;
+        const response = await fetch(`/stream/${videoId}`, { method: 'HEAD' });
+
+        if (response.ok) {
+          this.currentAudioUrl = `/stream/${videoId}`;
+          this.$refs.audioPlayer.src = this.currentAudioUrl;
+          await this.$refs.audioPlayer.play();
+          console.log(`[HYBRID] Using direct audio stream for ${videoId}`);
+          return true;
+        }
+      } catch (e) {
+        console.warn('[HYBRID] Direct stream failed:', e);
+      }
+
+      console.error(`[HYBRID] All playback methods failed for ${videoId}`);
+      return false;
+    },
+
+    // Mostrar botón de play para móviles (requiere interacción)
+    showMobilePlayButton(videoId) {
+      this.showNotification(`Toca para reproducir - ${this.state.current?.title || videoId}`, 'info');
+      // El usuario debe tocar play manualmente
+    },
+
+    // Opción de abrir en YouTube app
+    showYouTubeAppOption(videoId) {
+      const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+      this.showNotification(
+        `Problemas de reproducción. <a href="${youtubeUrl}" target="_blank" style="color: var(--spotify-green);">Abrir en YouTube</a>`,
+        'warning'
+      );
+    },
+
+    // Pausar/reanudar
+    togglePlayPause() {
+      if (this.isUsingYouTubePlayer && this.youtubePlayer) {
+        const state = this.youtubePlayer.getPlayerState();
+        if (state === YT.PlayerState.PLAYING) {
+          this.youtubePlayer.pauseVideo();
+        } else {
+          this.youtubePlayer.playVideo();
+        }
+      } else if (this.$refs.audioPlayer) {
+        if (this.$refs.audioPlayer.paused) {
+          this.$refs.audioPlayer.play();
+        } else {
+          this.$refs.audioPlayer.pause();
+        }
+      }
+    },
+
+    // Buscar posición
+    seekTo(seconds) {
+      if (this.isUsingYouTubePlayer && this.youtubePlayer) {
+        this.youtubePlayer.seekTo(seconds, true);
+      } else if (this.$refs.audioPlayer) {
+        this.$refs.audioPlayer.currentTime = seconds;
+      }
+    },
+
+    // Callbacks de YouTube Player
+    onYouTubePlayerReady(event) {
+      console.log(`[HYBRID] YouTube Player ready - Mobile: ${this.isMobile}`);
+      this.youtubePlayerReady = true;
+    },
+
+    onYouTubePlayerStateChange(event) {
+      const state = event.data;
+      console.log('[HYBRID] YouTube Player state changed:', state);
+
+      // Actualizar estado local basado en YouTube Player
+      if (state === YT.PlayerState.PLAYING) {
+        this.state.playing = true;
+
+        // Obtener metadata del video cuando empiece a reproducir
+        if (this.youtubePlayer && this.isUsingYouTubePlayer) {
+          try {
+            const duration = this.youtubePlayer.getDuration();
+            const videoData = this.youtubePlayer.getVideoData();
+
+            if (duration && duration > 0) {
+              // Solo actualizar si la duración ha cambiado significativamente
+              if (Math.abs(this.state.duration - duration) > 1) {
+                this.state.duration = duration;
+                this.state.durationLabel = this.mmss(duration);
+                console.log('[HYBRID] YouTube duration detected:', duration);
+
+                // Actualizar también en la cola si existe
+                const videoId = this.state.current ? this.state.current.id : null;
+                if (videoId) {
+                  const queueTrack = this.queue.find(t => t.id === videoId);
+                  if (queueTrack && Math.abs((queueTrack.seconds || 0) - duration) > 1) {
+                    queueTrack.seconds = duration;
+                  }
+                }
+              }
+            }
+
+            // Actualizar título si tenemos data del video
+            if (videoData && videoData.title && this.state.current) {
+              const newTitle = videoData.title;
+              const videoId = this.state.current.id;
+
+              // Solo actualizar si el título ha cambiado
+              if (this.state.current.title !== newTitle) {
+                this.state.current.title = newTitle;
+                console.log('[HYBRID] YouTube title detected:', newTitle);
+
+                // Actualizar también en la cola si existe
+                const queueTrack = this.queue.find(t => t.id === videoId);
+                if (queueTrack && queueTrack.title !== newTitle) {
+                  queueTrack.title = newTitle;
+                }
+
+                // Forzar actualización de la UI
+                this.$forceUpdate();
+
+                // Sincronizar con el servidor (opcional, para otros usuarios)
+                this.updateTrackMetadata(videoId, newTitle, duration);
+              }
+            }
+          } catch (e) {
+            console.warn('[HYBRID] Error getting YouTube metadata:', e);
+          }
+        }
+
+        // Iniciar ticker para posición
+        this.startYouTubePositionTicker();
+      } else if (state === YT.PlayerState.PAUSED || state === YT.PlayerState.ENDED) {
+        this.state.playing = false;
+        this.stopYouTubePositionTicker();
+      }
+
+      if (state === YT.PlayerState.ENDED) {
+        this.onTrackEnded();
+      }
+    },
+
+    // Ticker para posición de YouTube Player
+    startYouTubePositionTicker() {
+      if (this.youtubePositionInterval) {
+        clearInterval(this.youtubePositionInterval);
+      }
+
+      this.youtubePositionInterval = setInterval(() => {
+        if (this.isUsingYouTubePlayer && this.youtubePlayer && this.state.playing) {
+          try {
+            const currentTime = this.youtubePlayer.getCurrentTime();
+            if (currentTime !== undefined) {
+              this.state.position = currentTime;
+              this.state.positionLabel = this.mmss(currentTime);
+            }
+          } catch (e) {
+            console.warn('[HYBRID] Error getting YouTube position:', e);
+          }
+        }
+      }, 1000);
+    },
+
+    stopYouTubePositionTicker() {
+      if (this.youtubePositionInterval) {
+        clearInterval(this.youtubePositionInterval);
+        this.youtubePositionInterval = null;
+      }
+    },
+
+    onYouTubePlayerError(event) {
+      console.error('YouTube Player error:', event.data);
+
+      if (this.state.current && this.state.current.id) {
+        const videoId = this.state.current.id;
+
+        // Error 150: Video no disponible para reproducción embebida
+        if (event.data === 150) {
+          console.log(`[HYBRID] Video ${videoId} is not embeddable (error 150), marking as non-embeddable`);
+          this.nonEmbeddableVideos.add(videoId);
+          this.isUsingYouTubePlayer = false;
+
+          // Usar fallback apropiado basado en el dispositivo
+          if (this.isMobile) {
+            this.playMobileAudio(videoId);
+          } else {
+            this.playServerAudio(videoId);
+          }
+          return;
+        }
+
+        // Para otros errores, intentar fallback pero evitar bucle infinito
+        if (!this.nonEmbeddableVideos.has(videoId)) {
+          console.log('Attempting fallback to audio stream...');
+          this.isUsingYouTubePlayer = false;
+
+          if (this.isMobile) {
+            this.playMobileAudio(videoId);
+          } else {
+            this.playServerAudio(videoId);
+          }
+        }
+      }
+    },
+
+    // Callbacks de Audio Element
+    onAudioTimeUpdate() {
+      if (!this.isUsingYouTubePlayer) {
+        this.state.position = this.$refs.audioPlayer.currentTime;
+        this.state.positionLabel = this.mmss(this.state.position);
+      }
+    },
+
+    onAudioEnded() {
+      if (!this.isUsingYouTubePlayer) {
+        this.onTrackEnded();
+      }
+    },
+
+    onAudioLoaded() {
+      if (!this.isUsingYouTubePlayer) {
+        this.state.duration = this.$refs.audioPlayer.duration;
+        this.state.durationLabel = this.mmss(this.state.duration);
+      }
+    },
+
+    onAudioError(e) {
+      console.error('Audio playback error:', e);
+      this.showNotification('Error al reproducir el audio', 'error');
+    },
+
+    // Cuando termina una canción
+    onTrackEnded() {
+      console.log('Track ended, playing next...');
+      this.sendCommand('player:next');
+    },
+
+    // Rooms management
+    async loadRooms() {
+      try {
+        const response = await fetch('/api/rooms');
+        const data = await response.json();
+        this.availableRooms = data.rooms || [];
+      } catch (e) {
+        console.error('Error loading rooms:', e);
+      }
+    },
+
+    async createRoom() {
+      if (!this.newRoomName.trim()) return;
+      if (!this.newRoomIsPublic && !this.newRoomPassword.trim()) {
+        alert('Por favor ingresa una contraseña para la room privada');
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/rooms', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            name: this.newRoomName,
+            user_id: this.userId,
+            is_public: this.newRoomIsPublic,
+            password: this.newRoomIsPublic ? null : this.newRoomPassword
+          })
+        });
+        const data = await response.json();
+
+        // Mostrar la contraseña si es privada
+        if (!this.newRoomIsPublic) {
+          alert(`✅ Room privada creada!\n\n🔑 Contraseña: ${this.newRoomPassword}\n\nComparte esta contraseña con otros para que puedan acceder.`);
+        }
+
+        // Limpiar formulario
+        this.newRoomName = '';
+        this.newRoomPassword = '';
+        this.newRoomIsPublic = true;
+        this.showRoomModal = false;
+
+        await this.switchRoom(data.room_id);
+        await this.loadRooms();
+      } catch (e) {
+        console.error('Error creating room:', e);
+        alert('Error creando room: ' + e.message);
+      }
+    },
+
+    async switchRoom(roomId) {
+      // Cerrar WebSocket actual
+      if (this.ws) {
+        this.ws.close();
+        this.ws = null;
+      }
+
+      // Cargar info de la room primero
+      try {
+        const infoResponse = await fetch(`/api/rooms/${roomId}`);
+        const roomData = await infoResponse.json();
+
+        // Si la room requiere contraseña, pedirla
+        if (roomData.requires_password) {
+          const password = prompt(`🔒 Room privada: "${roomData.name}"\n\nIngresa la contraseña:`);
+          if (!password) {
+            alert('Contraseña requerida para acceder a esta room');
+            return;
+          }
+
+          // Intentar unirse con contraseña
+          const joinResponse = await fetch(`/api/rooms/${roomId}/join`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({password})
+          });
+
+          if (!joinResponse.ok) {
+            const error = await joinResponse.json();
+            alert('❌ ' + (error.error || 'Contraseña incorrecta'));
+            return;
+          }
+
+          const joinData = await joinResponse.json();
+          this.sessionToken = joinData.session_token;
+          localStorage.setItem('sessionToken', this.sessionToken);
+        } else {
+          // Room pública, obtener token sin contraseña
+          const joinResponse = await fetch(`/api/rooms/${roomId}/join`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({})
+          });
+          const joinData = await joinResponse.json();
+          this.sessionToken = joinData.session_token;
+          localStorage.setItem('sessionToken', this.sessionToken);
+        }
+
+        // Cambiar a nueva room
+        this.currentRoom = roomId;
+        localStorage.setItem('currentRoom', roomId);
+        this.roomName = roomData.name;
+
+        // Reconectar WebSocket con token
+        this.connectWS();
+
+      } catch (e) {
+        console.error('Error switching room:', e);
+        alert('Error accediendo a la room: ' + e.message);
+      }
+    },
+
+    async deleteRoom(roomId) {
+      if (!confirm('¿Estás seguro de que quieres eliminar esta room?')) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/rooms/${roomId}`, {
+          method: 'DELETE',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({user_id: this.userId})
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          alert('❌ ' + (error.error || 'Error eliminando room'));
+          return;
+        }
+
+        // Si estábamos en la room eliminada, volver a default
+        if (this.currentRoom === roomId) {
+          await this.switchRoom('default');
+        }
+
+        // Recargar lista de rooms
+        await this.loadRooms();
+        alert('✅ Room eliminada correctamente');
+      } catch (e) {
+        console.error('Error deleting room:', e);
+        alert('Error eliminando room: ' + e.message);
+      }
+    },
+
+    // Mobile menu methods
+    toggleMobileMenu() {
+      this.showMobileMenu = !this.showMobileMenu;
+    },
+
+    closeMobileMenu() {
+      this.showMobileMenu = false;
+    },
+
+    setCurrentPageMobile(page) {
+      this.currentPage = page;
+      this.showMobileMenu = false; // Close menu after selection
+    },
+
+    setCurrentPlaylistMobile(playlist) {
+      this.currentPlaylist = playlist;
+      this.currentPage = 'playlist';
+      this.showMobileMenu = false; // Close menu after selection
+    },
+
+    // Utility methods
+    thumb(id) {
+      return `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+    },
+
+    mmss(s) {
+      s = Math.max(0, Math.floor(s || 0));
+      return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+    },
+
+    // Notification methods
+    showNotification(message) {
+      this.notificationMessage = message;
+
+      // Show notification
+      const notification = this.$refs.notification;
+      notification.classList.add('show');
+
+      // Hide automatically after 3 seconds
+      setTimeout(() => {
+        notification.classList.add('hide');
+        notification.classList.remove('show');
+
+        // Reset after animation completes
+        setTimeout(() => {
+          notification.classList.remove('hide');
+          this.notificationMessage = '';
+        }, 300);
+      }, 3000);
+    },
+
+    // WebSocket methods
+    proto() {
+      return location.protocol === 'https:' ? 'wss' : 'ws';
+    },
+
+    connectWS() {
+      // Cerrar conexión anterior si existe
+      if (this.ws) {
+        this.ws.onclose = null; // Prevenir reconexión automática
+        this.ws.close();
+      }
+
+      // Conectar a la room actual
+      const roomPath = this.currentRoom || 'default';
+      // Agregar sessionToken a la URL si existe (y no es null/undefined)
+      const wsUrl = (this.sessionToken && this.sessionToken !== 'null' && this.sessionToken !== 'undefined')
+        ? `${this.proto()}://${location.host}/ws/${roomPath}?session_token=${this.sessionToken}`
+        : `${this.proto()}://${location.host}/ws/${roomPath}`;
+
+      console.log('[WS] Conectando a:', wsUrl);
+      this.ws = new WebSocket(wsUrl);
+      this.ws.onopen = () => {
+        this.connected = true;
+        // Refrescar metadata de tracks existentes al conectar
+        setTimeout(() => {
+          if (this.queue.length > 0) {
+            console.log('[WS-CONNECT] Refreshing metadata for existing queue items');
+            this.refreshAllQueueMetadata();
+          }
+        }, 1000);
+      };
+      this.ws.onclose = () => {
+        this.connected = false;
+        // Solo reconectar si no estamos siendo redirigidos
+        if (!this._isRedirecting) {
+          setTimeout(this.connectWS, 1000);
+        }
+      };
+      this.ws.onmessage = (ev) => {
+        const {type, data} = JSON.parse(ev.data);
+        if (type === 'state') {
+          const oldCurrentId = this.state.current ? this.state.current.id : null;
+          const preservedTitle = this.state.current && this.state.current.title &&
+                                !this.state.current.title.startsWith('YouTube Video') ?
+                                this.state.current.title : null;
+          const preservedDuration = this.state.duration && this.state.duration !== 180 ?
+                                   this.state.duration : null;
+
+          this.state = Object.assign(this.state, data);
+          this.queue = data.queue || [];
+
+          // Fetch metadata for queue tracks that need it
+          setTimeout(() => this.fetchQueueMetadata(), 100);
+
+          // Preservar título real del YouTube Player si es mejor que el placeholder
+          // Solo preservar si el nuevo título del servidor es un placeholder y tenemos un título mejor
+          if (preservedTitle && this.state.current &&
+              this.state.current.title.startsWith('YouTube Video') &&
+              preservedTitle !== this.state.current.title &&
+              preservedTitle !== 'Cargando desde YouTube...' &&
+              !preservedTitle.startsWith('YouTube Video')) {
+
+            const videoId = this.state.current.id;
+            const currentMeta = this.preservedMetadata.get(videoId) || {};
+
+            // Solo preservar si no hemos preservado este título antes
+            if (currentMeta.title !== preservedTitle) {
+              this.state.current.title = preservedTitle;
+              this.preservedMetadata.set(videoId, { ...currentMeta, title: preservedTitle });
+              console.log('[HYBRID] Preserved real title:', preservedTitle);
+            }
+          }
+
+          // Preservar duración real del YouTube Player si es mejor que el placeholder
+          // Solo preservar si la duración del servidor es un placeholder y tenemos una mejor
+          if (preservedDuration &&
+              (this.state.duration === 180 || this.state.duration === 0) &&
+              preservedDuration !== this.state.duration &&
+              Math.abs(this.state.duration - preservedDuration) > 1) {
+
+            const videoId = this.state.current ? this.state.current.id : null;
+            if (videoId) {
+              const currentMeta = this.preservedMetadata.get(videoId) || {};
+
+              // Solo preservar si no hemos preservado esta duración antes
+              if (currentMeta.duration !== preservedDuration) {
+                this.state.duration = preservedDuration;
+                this.state.durationLabel = this.mmss(preservedDuration);
+                this.preservedMetadata.set(videoId, { ...currentMeta, duration: preservedDuration });
+                console.log('[HYBRID] Preserved real duration:', preservedDuration);
+              }
+            }
+          }
+          // Actualizar nombre de room si viene del servidor
+          if (data.room_name) this.roomName = data.room_name;
+
+          // Si cambió la canción actual, usar el player híbrido SIEMPRE
+          const newCurrentId = this.state.current ? this.state.current.id : null;
+          if (newCurrentId && newCurrentId !== oldCurrentId) {
+            console.log('[HYBRID] New track detected, using hybrid player:', newCurrentId);
+
+            // Forzar reproducción híbrida independientemente del estado del servidor
+            if (this.state.playing) {
+              this.playHybrid(newCurrentId);
+            } else {
+              // Preparar para reproducción cuando se presione play
+              console.log('[HYBRID] Track loaded, ready for playback');
+            }
+          } else if (!newCurrentId) {
+            // No hay canción actual, sincronizar normalmente
+            this.syncAudio();
+          }
+        } else if (type === 'queue:update') {
+          this.queue = data || [];
+          this.markQueueReadiness();
+        } else if (type === 'player:tick') {
+          this.state.position = data.position;
+          this.state.positionLabel = data.positionLabel;
+          this.syncAudio();
+        } else if (type === 'player:next') {
+          // Nueva canción iniciada desde el servidor
+          if (data.current && data.current.id) {
+            console.log('Server started new track:', data.current.id);
+            this.playHybrid(data.current.id);
+          }
+        } else if (type === 'room_not_found') {
+          console.warn('Room no encontrado, redirigiendo a default');
+          this._isRedirecting = true;
+          // Limpiar referencias al room inexistente
+          this.sessionToken = null;
+          localStorage.removeItem('sessionToken');
+          localStorage.setItem('currentRoom', 'default');
+          this.currentRoom = 'default';
+          // Reconectar al room default
+          this._isRedirecting = false;
+          this.connectWS();
+        } else if (type === 'error') {
+          console.error('WebSocket error:', data);
+          if (data.message && data.message.includes('Token') || data.message && data.message.includes('Token de sesión')) {
+            console.warn('Sesión inválida, redirigiendo a default');
+            this._isRedirecting = true;
+            // Limpiar sesión y redirigir a default
+            this.sessionToken = null;
+            localStorage.removeItem('sessionToken');
+            localStorage.setItem('currentRoom', 'default');
+            this.currentRoom = 'default';
+            // Reconectar al room default
+            this._isRedirecting = false;
+            this.connectWS();
+          }
+        } else if (type === 'ok') {
+          // Handle successful operations (like queue:add)
+          if (data && data.action === 'queue:add') {
+            console.log('[QUEUE] Song successfully added to queue:', data.id);
+            // Clear adding state for the specific videoId that was added
+            this.clearAddingState(data.id);
+          }
+        } else if (type === 'warning') {
+          // Handle warnings (like restricted YouTube videos)
+          if (data && data.action === 'queue:add') {
+            console.warn('[QUEUE] Song added with warning:', data.message);
+            // Clear adding state even for warnings since the song was added
+            if (data.track && data.track.id) {
+              this.clearAddingState(data.track.id);
+            }
+          }
+        } else if (type === 'room_deleted') {
+          alert('⚠️ ' + data.message);
+          this.switchRoom('default');
+        }
+      };
+    },
+
+    wsSend(type, data) {
+      // Interceptar comandos de reproducción para usar el player híbrido
+      if (type === 'player:play' && this.state.current) {
+        this.playHybrid(this.state.current.id);
+        // También enviar al servidor para sincronización
+        if (this.ws && this.ws.readyState === 1) {
+          this.ws.send(JSON.stringify({type, ...data}));
+        }
+        return;
+      }
+
+      if (type === 'player:pause') {
+        this.togglePlayPause();
+        // También enviar al servidor para sincronización
+        if (this.ws && this.ws.readyState === 1) {
+          this.ws.send(JSON.stringify({type, ...data}));
+        }
+        return;
+      }
+
+      if (type === 'player:seek') {
+        this.seekTo(data.at);
+        // También enviar al servidor para sincronización
+        if (this.ws && this.ws.readyState === 1) {
+          this.ws.send(JSON.stringify({type, ...data}));
+        }
+        return;
+      }
+
+      // Para otros comandos, enviar normalmente
+      if (this.ws && this.ws.readyState === 1) {
+        this.ws.send(JSON.stringify({type, ...data}));
+      }
+    },
+
+    // Método separado para comandos que solo van al servidor
+    sendCommand(type, data = {}) {
+      if (this.ws && this.ws.readyState === 1) {
+        this.ws.send(JSON.stringify({type, ...data}));
+      }
+    },
+
+    // Music management methods
+    async addAndEnqueue() {
+      if (!this.urlOrId) return;
+      const show = this.urlOrId.length > 20 ? this.urlOrId.slice(0,20) + '…' : this.urlOrId;
+      this.adding.push({show});
+      this.busy = true;
+      try {
+        await fetch('/api/tracks', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({urlOrId: this.urlOrId, enqueue: true})
+        });
+        this.urlOrId = '';
+        setTimeout(this.refreshQueue, 500);
+        setTimeout(this.refreshQueue, 2000);
+        setTimeout(this.refreshQueue, 5000);
+      } catch(e) {
+        alert('Error agregando: ' + e);
+      } finally {
+        this.busy = false;
+        this.adding.shift();
+      }
+    },
+
+    refreshQueue() {
+      // Solo pedir actualización por WebSocket (que usa el room correcto)
+      // NO llamar a /api/queue que siempre usa "default" y causa pestañeo
+      this.wsSend('state:get', {});
+    },
+
+    // Audio synchronization
+    syncAudio() {
+      const audio = document.getElementById('audio');
+      if (!this.state.current) {
+        audio.pause();
+        return;
+      }
+
+      // Comparar solo el path, no el origin (para soportar redirects de YouTube)
+      const currentSrc = new URL(audio.src || 'about:blank', location.origin).pathname;
+      const newSrc = this.audioSrc;
+
+      if (currentSrc !== newSrc && audio.src !== location.origin + newSrc) {
+        audio.src = this.audioSrc;
+        // Apply volume when new audio loads
+        setTimeout(() => this.applyVolume(), 100);
+      }
+
+      // Ensure volume is always applied
+      this.applyVolume();
+
+      const drift = Math.abs((audio.currentTime || 0) - (this.state.position || 0));
+      if (drift > 0.5) audio.currentTime = this.state.position || 0;
+      if (this.state.playing && audio.paused) {
+        audio.play().catch(() => { this.needUserGesture = true; });
+      }
+      if (!this.state.playing && !audio.paused) audio.pause();
+    },
+
+    onSeek(e) {
+      const at = Number(e.target.value || 0);
+      this.wsSend('player:seek', { at });
+    },
+
+    setVolume(value) {
+      this.volume = parseFloat(value);
+      this.applyVolume();
+    },
+
+    applyVolume() {
+      if (this.volume <= 0) this.volume = 0.01;
+      document.getElementById('audio').volume = this.volume;
+      localStorage.setItem('vol', String(this.volume));
+      if (this.volume > 0 && this.muted) this.muted = false;
+    },
+
+    toggleMute() {
+      this.muted = !this.muted;
+      document.getElementById('audio').muted = this.muted;
+      try {
+        localStorage.setItem('muted', String(this.muted));
+      } catch (e) {
+        // Modo incógnito puede bloquear localStorage
+        console.warn('No se pudo guardar estado de mute:', e);
+      }
+    },
+
+    applyRate() {
+      if (!this.rate || this.rate < 0.5) this.rate = 1;
+      document.getElementById('audio').playbackRate = this.rate;
+      localStorage.setItem('rate', String(this.rate));
+    },
+
+    seekToPosition(event) {
+      if (!this.state.current || this.state.duration <= 0) return;
+
+      const progressBar = event.currentTarget;
+      const rect = progressBar.getBoundingClientRect();
+      const clickX = event.clientX - rect.left;
+      const percentage = clickX / rect.width;
+      const newPosition = Math.floor(this.state.duration * percentage);
+
+      // Enviar comando de seek al servidor
+      this.wsSend('player:seek', { at: newPosition });
+
+      // Actualizar posición local inmediatamente para feedback visual
+      this.state.position = newPosition;
+      const audio = document.getElementById('audio');
+      if (audio && !isNaN(audio.duration)) {
+        audio.currentTime = newPosition;
+      }
+    },
+
+    async enableAudio() {
+      try {
+        await document.getElementById('audio').play();
+        this.needUserGesture = false;
+      } catch {
+        this.needUserGesture = true;
+      }
+    },
+
+    async markQueueReadiness() {
+      // En modo híbrido/serverless, no verificar readiness del servidor
+      // Todos los tracks están "listos" porque usan YouTube Player
+      if (this.isUsingYouTubePlayer || this.queue.some(t => t.mode === 'hybrid' || t.mode === 'lightweight')) {
+        this.queue.forEach(t => t._ready = true);
+        return;
+      }
+
+      const now = Date.now();
+      const CACHE_DURATION = 30000; // 30 seconds cache
+
+      const tasks = this.queue.map(async t => {
+        // Check cache first
+        const cached = this.readinessCache.get(t.id);
+        if (cached && cached.ready && (now - cached.timestamp) < CACHE_DURATION) {
+          t._ready = true;
+          return t;
+        }
+
+        // Only check if not in cache or cache expired or was not ready
+        try {
+          const r = await fetch(`/stream/${t.id}`, { headers: { Range: 'bytes=0-0' } });
+          const ready = (r.status === 206 || r.status === 200);
+          t._ready = ready;
+
+          // Cache the result
+          this.readinessCache.set(t.id, { ready, timestamp: now });
+
+          // If ready, cache for longer (since files don't disappear)
+          if (ready) {
+            this.readinessCache.set(t.id, { ready: true, timestamp: now + CACHE_DURATION * 10 });
+          }
+        } catch {
+          t._ready = false;
+          // Cache negative result for shorter time
+          this.readinessCache.set(t.id, { ready: false, timestamp: now });
+        }
+        return t;
+      });
+
+      await Promise.allSettled(tasks);
+      this.$forceUpdate();
+    },
+
+    // Update track metadata on server for synchronization
+    async updateTrackMetadata(videoId, title, duration) {
+      try {
+        // Solo actualizar si tenemos datos válidos
+        if (!videoId || (!title && !duration)) return;
+
+        const payload = { id: videoId };
+        if (title && !title.startsWith('YouTube Video')) {
+          payload.title = title;
+        }
+        if (duration && duration > 0) {
+          payload.seconds = Math.round(duration);
+        }
+
+        await fetch('/api/tracks/metadata', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        console.log('[HYBRID] Updated server metadata for', videoId);
+      } catch (e) {
+        console.warn('[HYBRID] Failed to update server metadata:', e);
+      }
+    },
+
+    // Fetch metadata for queue tracks proactively
+    async fetchQueueMetadata() {
+      try {
+        // Get tracks in queue that need metadata (have placeholder titles)
+        const tracksNeedingMetadata = this.queue.filter(track =>
+          track.title && track.title.startsWith('YouTube Video') &&
+          !this.preservedMetadata.has(track.id)
+        );
+
+        if (tracksNeedingMetadata.length === 0) return;
+
+        // Process tracks one by one using yt-dlp backend
+        const batchSize = 1; // Process one track at a time for better reliability
+        const batch = tracksNeedingMetadata.slice(0, batchSize);
+
+        console.log('[QUEUE-METADATA] Fetching metadata using yt-dlp for:', batch.map(t => t.id).join(','));
+
+        // Mark as being processed to prevent duplicate requests
+        batch.forEach(track => {
+          this.preservedMetadata.set(track.id, { processing: true });
+        });
+
+        // Process each track individually using our yt-dlp endpoint
+        for (const track of batch) {
+          try {
+            const response = await fetch(`/api/metadata/${track.id}`);
+            const metadata = await response.json();
+
+            if (metadata && metadata.title && !metadata.error) {
+              // Update queue track with real metadata
+              const queueTrack = this.queue.find(t => t.id === track.id);
+              if (queueTrack) {
+                queueTrack.title = metadata.title;
+                if (metadata.duration && metadata.duration > 0) {
+                  queueTrack.seconds = metadata.duration;
+                }
+
+                // Mark as successfully processed
+                this.preservedMetadata.set(track.id, {
+                  title: metadata.title,
+                  duration: metadata.duration
+                });
+
+                // Force Vue.js to update the UI to reflect metadata changes
+                this.$forceUpdate();
+
+                // Update server metadata
+                try {
+                  await this.updateTrackMetadata(track.id, metadata.title, metadata.duration);
+                } catch (serverError) {
+                  console.warn('[QUEUE-METADATA] Server update failed, but local update succeeded:', serverError);
+                }
+
+                console.log('[QUEUE-METADATA] Updated via yt-dlp:', track.id, metadata.title);
+              }
+            } else {
+              // Mark as failed if no valid metadata
+              this.preservedMetadata.set(track.id, {
+                title: track.title,
+                failed: true,
+                error: metadata.error || 'No metadata available'
+              });
+              console.warn('[QUEUE-METADATA] Failed to get metadata for:', track.id, metadata.error);
+            }
+
+          } catch (error) {
+            // Mark as failed on network/server error
+            this.preservedMetadata.set(track.id, {
+              title: track.title,
+              failed: true,
+              error: error.message
+            });
+            console.warn('[QUEUE-METADATA] Network error for:', track.id, error);
+          }
+        }
+
+        // Force UI update after processing
+        this.$forceUpdate();
+
+      } catch (e) {
+        console.warn('[QUEUE-METADATA] Failed to fetch metadata:', e);
+
+        // Mark all tracks as failed to prevent retry loops
+        const tracksNeedingMetadata = this.queue.filter(track =>
+          track.title && track.title.startsWith('YouTube Video') &&
+          (!this.preservedMetadata.has(track.id) || this.preservedMetadata.get(track.id).processing)
+        );
+
+        tracksNeedingMetadata.forEach(track => {
+          this.preservedMetadata.set(track.id, {
+            title: track.title,
+            failed: true
+          });
+        });
+      }
+    },
+
+    // Parse YouTube duration format (PT4M20S) to seconds
+    parseYouTubeDuration(duration) {
+      const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
+      if (!match) return 0;
+
+      const hours = parseInt(match[1]) || 0;
+      const minutes = parseInt(match[2]) || 0;
+      const seconds = parseInt(match[3]) || 0;
+
+      return (hours * 3600) + (minutes * 60) + seconds;
+    },
+
+    // Search methods
+    async searchMusic() {
+      if (!this.searchQuery.trim()) return;
+      this.searching = true;
+      this.currentSearchPage = 0; // Reset to first page
+
+      try {
+        console.log('[SEARCH] Intentando búsqueda en servidor...');
+        const response = await fetch(`/api/search?q=${encodeURIComponent(this.searchQuery)}&maxResults=30`);
+        const data = await response.json();
+
+        // Si el servidor retorna resultados, usarlos
+        if (data.items && data.items.length > 0) {
+          console.log(`[SEARCH] Servidor exitoso: ${data.items.length} resultados`);
+          this.searchResults = data.items;
+        } else {
+          console.log('[SEARCH] Servidor sin resultados, intentando fallback frontend...');
+          await this.searchMusicFrontend();
+          return;
+        }
+
+        // Initialize reactive properties for dropdowns
+        this.searchResults.forEach(song => {
+          this.$set(song, '_showPlaylists', false);
+        });
+
+        this.setCurrentPage('search');
+      } catch(e) {
+        console.log(`[SEARCH] Servidor falló: ${e.message}, intentando fallback frontend...`);
+        await this.searchMusicFrontend();
+      } finally {
+        this.searching = false;
+      }
+    },
+
+    async searchMusicFrontend() {
+      console.log('[SEARCH] Usando búsqueda frontend con YouTube Data API...');
+      try {
+        // Usar búsqueda directa desde el navegador del usuario
+        // Esto evita las limitaciones de IP del servidor
+        const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(this.searchQuery)}&type=video&maxResults=30&key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8`;
+
+        const response = await fetch(searchUrl);
+        if (!response.ok) {
+          throw new Error('YouTube API falló');
+        }
+
+        const data = await response.json();
+
+        if (data.items && data.items.length > 0) {
+          // Convertir formato de YouTube Data API al formato esperado
+          this.searchResults = data.items.map(item => ({
+            id: {
+              kind: 'youtube#video',
+              videoId: item.id.videoId
+            },
+            snippet: {
+              title: item.snippet.title,
+              description: item.snippet.description,
+              thumbnails: {
+                default: { url: `https://i.ytimg.com/vi/${item.id.videoId}/default.jpg` },
+                medium: { url: `https://i.ytimg.com/vi/${item.id.videoId}/mqdefault.jpg` },
+                high: { url: `https://i.ytimg.com/vi/${item.id.videoId}/hqdefault.jpg` }
+              },
+              channelTitle: item.snippet.channelTitle
+            },
+            duration: 0, // No disponible en search API
+            url: `https://www.youtube.com/watch?v=${item.id.videoId}`
+          }));
+
+          console.log(`[SEARCH] Frontend exitoso: ${this.searchResults.length} resultados`);
+
+          // Initialize reactive properties for dropdowns
+          this.searchResults.forEach(song => {
+            this.$set(song, '_showPlaylists', false);
+          });
+
+          this.setCurrentPage('search');
+        } else {
+          console.log('[SEARCH] Frontend sin resultados');
+          this.searchResults = [];
+          alert('No se encontraron resultados para: ' + this.searchQuery);
+        }
+
+      } catch(e) {
+        console.log(`[SEARCH] Frontend también falló: ${e.message}`);
+        this.searchResults = [];
+        alert('Error en búsqueda frontend: ' + e.message);
+      }
+    },
+
+    clearSearch() {
+      this.searchResults = [];
+      this.searchQuery = '';
+      this.currentSearchPage = 0;
+    },
+
+    nextSearchPage() {
+      if (this.hasNextPage) {
+        this.currentSearchPage++;
+      }
+    },
+
+    prevSearchPage() {
+      if (this.hasPrevPage) {
+        this.currentSearchPage--;
+      }
+    },
+
+    async playNow(videoId) {
+      try {
+        const response = await fetch('/api/tracks', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({urlOrId: videoId, enqueue: true})
+        });
+        if (response.ok) {
+          setTimeout(() => {
+            this.wsSend('player:next', {});
+          }, 1000);
+        }
+      } catch(e) {
+        alert('Error reproduciendo: ' + e.message);
+      }
+    },
+
+    async addToQueue(videoId, searchResult = null) {
+      // Optimistic UI: Instantly add to queue with loading state
+      this.adding.push({show: videoId});
+
+      // Add to queue optimistically with basic info from search result
+      const optimisticTrack = {
+        id: videoId,
+        title: searchResult ? searchResult.snippet.title : `YouTube Video ${videoId}`,
+        seconds: null,
+        mode: 'hybrid',
+        _optimistic: true,
+        _loading: true
+      };
+
+      // Add optimistically to queue
+      this.queue.push(optimisticTrack);
+      console.log(`[UX] Optimistically added ${videoId} to queue for instant feedback`);
+
+      try {
+        // Usar WebSocket para agregar a la cola del room actual
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          // En modo lightweight/serverless, siempre usar modo híbrido para evitar descargas del servidor
+          const isHybridMode = true; // Arquitectura serverless - siempre usar cliente
+          console.log(`[QUEUE] Adding ${videoId} with hybrid mode: ${isHybridMode} (serverless architecture)`);
+
+          this.ws.send(JSON.stringify({
+            type: 'queue:add',
+            urlOrId: videoId,
+            hybrid: isHybridMode
+          }));
+
+          // Update optimistic track to processing state
+          const optimisticIndex = this.queue.findIndex(t => t.id === videoId && t._optimistic);
+          if (optimisticIndex !== -1) {
+            this.queue[optimisticIndex]._loading = false;
+            this.queue[optimisticIndex]._processing = true;
+          }
+        } else {
+          throw new Error('WebSocket no conectado al room actual');
+        }
+        setTimeout(this.refreshQueue, 500);
+      } catch(e) {
+        // Remove optimistic track on error
+        this.queue = this.queue.filter(t => !(t.id === videoId && t._optimistic));
+        alert('Error agregando a la cola del room ' + this.roomName + ': ' + e.message);
+        // Clear adding state on error
+        this.clearAddingState(videoId);
+      }
+    },
+
+    clearAddingState(videoId) {
+      // Remove the specific videoId from the adding state
+      this.adding = this.adding.filter(item => item.show !== videoId);
+      console.log('[QUEUE] Cleared adding state for:', videoId);
+    },
+
+    // ---- Liked Songs methods ----
+    isLiked(songId) {
+      return this.likedSongs.some(song => song.id === songId);
+    },
+
+    toggleLike(songId, songTitle) {
+      if (this.isLiked(songId)) {
+        // Remove from favorites
+        this.likedSongs = this.likedSongs.filter(song => song.id !== songId);
+      } else {
+        // Add to favorites
+        this.likedSongs.push({
+          id: songId,
+          title: songTitle,
+          addedAt: Date.now(),
+          thumbnail: this.thumb(songId)
+        });
+      }
+      localStorage.setItem('likedSongs', JSON.stringify(this.likedSongs));
+      this.$forceUpdate(); // Force reactivity update
+    },
+
+    formatDate(timestamp) {
+      const date = new Date(timestamp);
+      const now = new Date();
+      const diffTime = Math.abs(now - date);
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+      const diffMinutes = Math.floor(diffTime / (1000 * 60));
+
+      if (diffMinutes < 1) return 'Hace unos segundos';
+      if (diffMinutes < 60) return `Hace ${diffMinutes} minutos`;
+      if (diffHours < 24) return `Hace ${diffHours} horas`;
+      if (diffDays === 1) return 'Hace 1 día';
+      if (diffDays < 30) return `Hace ${diffDays} días`;
+      if (diffDays < 365) {
+        const months = Math.floor(diffDays / 30);
+        return months === 1 ? 'Hace 1 mes' : `Hace ${months} meses`;
+      }
+      const years = Math.floor(diffDays / 365);
+      return years === 1 ? 'Hace 1 año' : `Hace ${years} años`;
+    },
+
+    async playLikedSong(songId) {
+      try {
+        const response = await fetch('/api/tracks', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({urlOrId: songId, enqueue: true})
+        });
+        if (response.ok) {
+          setTimeout(() => {
+            this.wsSend('player:next', {});
+          }, 1000);
+          this.setCurrentPage('home'); // Navigate to home to see the player
+        }
+      } catch(e) {
+        alert('Error reproduciendo: ' + e.message);
+      }
+    },
+
+    removeLikedSong(songId) {
+      this.likedSongs = this.likedSongs.filter(song => song.id !== songId);
+      localStorage.setItem('likedSongs', JSON.stringify(this.likedSongs));
+    },
+
+    // ---- Playlist methods ----
+    createNewPlaylist() {
+      if (!this.newPlaylistName.trim()) return;
+
+      const playlist = {
+        id: Date.now().toString(),
+        name: this.newPlaylistName.trim(),
+        songs: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+
+      this.playlists.push(playlist);
+      this.savePlaylists();
+      this.newPlaylistName = '';
+      this.showCreatePlaylist = false;
+    },
+
+    deletePlaylist(playlistId) {
+      if (confirm('¿Eliminar esta playlist?')) {
+        this.playlists = this.playlists.filter(p => p.id !== playlistId);
+        this.savePlaylists();
+        if (this.currentPlaylist && this.currentPlaylist.id === playlistId) {
+          this.currentPlaylist = null;
+        }
+      }
+    },
+
+    async addToPlaylist(playlistId, songId, songTitle) {
+      const playlist = this.playlists.find(p => p.id === playlistId);
+      if (!playlist) {
+        console.error('Playlist not found:', playlistId);
+        return;
+      }
+
+      // Check if song already exists
+      if (playlist.songs.some(s => s.id === songId)) {
+        this.showNotification('La canción ya está en esta playlist');
+        return;
+      }
+
+      const newSong = {
+        id: songId,
+        title: songTitle,
+        thumbnail: this.thumb(songId),
+        addedAt: Date.now()
+      };
+
+      playlist.songs.push(newSong);
+      playlist.updatedAt = Date.now();
+
+      this.savePlaylists();
+      this.showNotification(`Agregado a "${playlist.name}"`);
+
+      // Automatically download the song for playlist playback
+      try {
+        console.log(`Descargando canción para playlist: ${songTitle}`);
+
+        // Immediately set status to downloading with 0% progress
+        this.readinessCache.set(songId, {
+          ready: false,
+          status: 'downloading',
+          progress: 0,
+          file_size: 0
+        });
+
+        console.log('🟠 Set initial downloading status for:', songId);
+
+        // Force UI update to show downloading status
+        this.$forceUpdate();
+
+        // Start polling for progress immediately
+        this.pollDownloadProgress(songId);
+
+        // Start the download
+        const response = await fetch('/api/download', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            urlOrId: songId,
+            enqueue: false
+          })
+        });
+
+        if (response.ok) {
+          console.log(`Descarga completada para: ${songTitle}`);
+
+          // Update cache immediately after successful download
+          this.readinessCache.set(songId, {
+            ready: true,
+            status: 'completed',
+            progress: 100,
+            file_size: 0
+          });
+
+          // Force UI update
+          this.$forceUpdate();
+        }
+
+      } catch (error) {
+        console.error('Error downloading song for playlist:', error);
+        // Set error status
+        this.readinessCache.set(songId, {
+          ready: false,
+          status: 'error',
+          progress: 0,
+          file_size: 0
+        });
+        this.$forceUpdate();
+      }
+    },
+
+    removeFromPlaylist(playlistId, songId) {
+      const playlist = this.playlists.find(p => p.id === playlistId);
+      if (!playlist) return;
+
+      playlist.songs = playlist.songs.filter(s => s.id !== songId);
+      playlist.updatedAt = Date.now();
+      this.savePlaylists();
+    },
+
+    savePlaylists() {
+      localStorage.setItem('userPlaylists', JSON.stringify(this.playlists));
+    },
+
+    openPlaylist(playlist) {
+      this.currentPlaylist = playlist;
+      this.setCurrentPage('playlist');
+    },
+
+    // ---- Playlist Player methods ----
+    playPlaylist(playlist, startIndex = 0) {
+      if (!playlist.songs.length) return;
+
+      this.currentPlaylist = playlist;
+      this.playlistPlayer.currentIndex = startIndex;
+      this.playPlaylistSong();
+    },
+
+    async playPlaylistSong() {
+      if (!this.currentPlaylist || !this.currentPlaylist.songs.length) return;
+
+      const song = this.currentPlaylist.songs[this.playlistPlayer.currentIndex];
+      if (!song) return;
+
+      // Check if song is ready first
+      const readyStatus = await this.checkPlaylistSongReady(song.id);
+      if (!readyStatus.ready) {
+        console.log('Song not ready for playlist playback:', song.title);
+        // Force update UI to show downloading status
+        this.readinessCache.set(song.id, readyStatus);
+        this.$forceUpdate();
+        return;
+      }
+
+      // Update cache to show it's ready
+      this.readinessCache.set(song.id, readyStatus);
+
+      // Stop any current playlist audio and visualizer
+      this.stopPlaylistVisualizer();
+
+      if (this.playlistPlayer.audio) {
+        this.playlistPlayer.audio.pause();
+        this.playlistPlayer.audio = null;
+      }
+
+      // Reset audio context to allow new source connection
+      if (this.playlistPlayer.audioContext) {
+        this.playlistPlayer.audioContext.close();
+        this.playlistPlayer.audioContext = null;
+        this.playlistPlayer.analyser = null;
+      }
+
+      // Create new audio element for playlist
+      const audio = new Audio(`/stream/${song.id}`);
+      this.playlistPlayer.audio = audio;
+
+      // Apply volume immediately
+      this.applyPlaylistVolume();
+
+      audio.addEventListener('loadedmetadata', () => {
+        this.playlistPlayer.duration = audio.duration;
+        // Ensure volume is applied when metadata loads
+        this.applyPlaylistVolume();
+      });
+
+      audio.addEventListener('timeupdate', () => {
+        this.playlistPlayer.currentTime = audio.currentTime;
+      });
+
+      audio.addEventListener('ended', () => {
+        this.nextPlaylistSong();
+      });
+
+      audio.addEventListener('error', (e) => {
+        console.error('Playlist audio error:', e);
+        this.playlistPlayer.isPlaying = false;
+      });
+
+      audio.play().then(() => {
+        this.playlistPlayer.isPlaying = true;
+        // Initialize audio visualizer
+        this.initPlaylistVisualizer();
+      }).catch(error => {
+        console.error('Error playing playlist song:', error);
+        this.playlistPlayer.isPlaying = false;
+      });
+    },
+
+    // ---- Audio Visualizer methods ----
+    initPlaylistVisualizer() {
+      if (!this.playlistPlayer.audio) return;
+
+      try {
+        // Create AudioContext and analyser only once
+        if (!this.playlistPlayer.audioContext) {
+          this.playlistPlayer.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          this.playlistPlayer.analyser = this.playlistPlayer.audioContext.createAnalyser();
+          this.playlistPlayer.analyser.fftSize = 128; // 64 bars
+          this.playlistPlayer.analyser.smoothingTimeConstant = 0.8;
+
+          // Create source and connect to analyser
+          const source = this.playlistPlayer.audioContext.createMediaElementSource(this.playlistPlayer.audio);
+          source.connect(this.playlistPlayer.analyser);
+          this.playlistPlayer.analyser.connect(this.playlistPlayer.audioContext.destination);
+
+          const bufferLength = this.playlistPlayer.analyser.frequencyBinCount;
+          this.playlistPlayer.dataArray = new Uint8Array(bufferLength);
+        }
+
+        // Resume AudioContext if suspended (browser autoplay policy)
+        if (this.playlistPlayer.audioContext.state === 'suspended') {
+          this.playlistPlayer.audioContext.resume();
+        }
+
+        // Start visualization
+        this.drawPlaylistSpectrum();
+      } catch (error) {
+        console.error('Error initializing visualizer:', error);
+      }
+    },
+
+    drawPlaylistSpectrum() {
+      if (!this.$refs.playlistSpectrumCanvas || !this.playlistPlayer.analyser) return;
+
+      const canvas = this.$refs.playlistSpectrumCanvas;
+      const canvasCtx = canvas.getContext('2d');
+      const analyser = this.playlistPlayer.analyser;
+      const dataArray = this.playlistPlayer.dataArray;
+
+      const draw = () => {
+        this.playlistPlayer.animationId = requestAnimationFrame(draw);
+
+        analyser.getByteFrequencyData(dataArray);
+
+        // Clear canvas with dark background
+        canvasCtx.fillStyle = '#121212';
+        canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const barWidth = (canvas.width / dataArray.length) * 0.8;
+        let barHeight;
+        let x = 0;
+
+        for (let i = 0; i < dataArray.length; i++) {
+          barHeight = (dataArray[i] / 255) * canvas.height * 0.9;
+
+          // Create RGB gradient - colors change based on position
+          const hue = (i / dataArray.length) * 360; // 0-360 for full color spectrum
+          const gradient = canvasCtx.createLinearGradient(0, canvas.height - barHeight, 0, canvas.height);
+
+          // Top color: bright vibrant
+          gradient.addColorStop(0, `hsl(${hue}, 100%, 60%)`);
+          // Middle: saturated
+          gradient.addColorStop(0.5, `hsl(${hue}, 90%, 50%)`);
+          // Bottom: deep rich
+          gradient.addColorStop(1, `hsl(${hue}, 80%, 40%)`);
+
+          canvasCtx.fillStyle = gradient;
+          canvasCtx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+
+          x += barWidth + (canvas.width / dataArray.length) * 0.2;
+        }
+      };
+
+      draw();
+    },
+
+    stopPlaylistVisualizer() {
+      if (this.playlistPlayer.animationId) {
+        cancelAnimationFrame(this.playlistPlayer.animationId);
+        this.playlistPlayer.animationId = null;
+      }
+    },
+
+    pausePlaylist() {
+      if (this.playlistPlayer.audio) {
+        this.playlistPlayer.audio.pause();
+        this.playlistPlayer.isPlaying = false;
+        this.stopPlaylistVisualizer();
+      }
+    },
+
+    resumePlaylist() {
+      if (this.playlistPlayer.audio) {
+        this.playlistPlayer.audio.play();
+        this.playlistPlayer.isPlaying = true;
+        this.drawPlaylistSpectrum();
+      }
+    },
+
+    nextPlaylistSong() {
+      if (!this.currentPlaylist) return;
+
+      if (this.playlistPlayer.currentIndex < this.currentPlaylist.songs.length - 1) {
+        this.playlistPlayer.currentIndex++;
+        this.playPlaylistSong();
+      } else {
+        // End of playlist
+        this.playlistPlayer.isPlaying = false;
+      }
+    },
+
+    prevPlaylistSong() {
+      if (!this.currentPlaylist) return;
+
+      if (this.playlistPlayer.currentIndex > 0) {
+        this.playlistPlayer.currentIndex--;
+        this.playPlaylistSong();
+      }
+    },
+
+    getCurrentPlaylistSong() {
+      if (!this.currentPlaylist || !this.currentPlaylist.songs.length) return null;
+      return this.currentPlaylist.songs[this.playlistPlayer.currentIndex];
+    },
+
+    // ---- Playlist volume control ----
+    setPlaylistVolume(value) {
+      this.playlistPlayer.volume = parseFloat(value);
+      this.playlistPlayer.isMuted = false;
+      this.applyPlaylistVolume();
+      this.savePlaylistVolume();
+    },
+
+    togglePlaylistMute() {
+      this.playlistPlayer.isMuted = !this.playlistPlayer.isMuted;
+      this.applyPlaylistVolume();
+      this.savePlaylistVolume();
+    },
+
+    applyPlaylistVolume() {
+      if (this.playlistPlayer.audio) {
+        this.playlistPlayer.audio.volume = this.playlistPlayer.isMuted ? 0 : this.playlistPlayer.volume;
+      }
+    },
+
+    savePlaylistVolume() {
+      localStorage.setItem('playlistVolume', this.playlistPlayer.volume.toString());
+      localStorage.setItem('playlistMuted', this.playlistPlayer.isMuted.toString());
+    },
+
+    loadPlaylistVolume() {
+      const savedVolume = localStorage.getItem('playlistVolume');
+      const savedMuted = localStorage.getItem('playlistMuted');
+
+      if (savedVolume) {
+        this.playlistPlayer.volume = parseFloat(savedVolume);
+      }
+      if (savedMuted) {
+        this.playlistPlayer.isMuted = savedMuted === 'true';
+      }
+    },
+
+    // ---- Playlist seek and shuffle functions ----
+    seekPlaylistAudio(event) {
+      if (!this.playlistPlayer.audio || !this.playlistPlayer.duration) return;
+
+      const progressBar = event.currentTarget;
+      const rect = progressBar.getBoundingClientRect();
+      const clickX = event.clientX - rect.left;
+      const percentage = clickX / rect.width;
+      const newTime = this.playlistPlayer.duration * percentage;
+
+      this.playlistPlayer.audio.currentTime = newTime;
+    },
+
+    shufflePlayPlaylist(playlist) {
+      if (!playlist.songs.length) return;
+
+      // Create a shuffled copy of the songs array
+      const shuffledSongs = [...playlist.songs];
+      for (let i = shuffledSongs.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledSongs[i], shuffledSongs[j]] = [shuffledSongs[j], shuffledSongs[i]];
+      }
+
+      // Create a temporary playlist with shuffled songs
+      const shuffledPlaylist = { ...playlist, songs: shuffledSongs };
+      this.currentPlaylist = shuffledPlaylist;
+      this.playlistPlayer.currentIndex = 0;
+      this.playPlaylistSong();
+
+      this.showNotification(`Reproduciendo "${playlist.name}" en modo aleatorio`);
+    },
+
+    // ---- Check playlist song readiness ----
+    async checkPlaylistSongReady(songId) {
+      try {
+        const response = await fetch(`/ready/${songId}`);
+        const data = await response.json();
+        return {
+          ready: response.ok && data.ready,
+          status: data.status || 'unknown',
+          progress: data.progress || 0,
+          file_size: data.file_size || 0
+        };
+      } catch (error) {
+        console.error('Error checking playlist song readiness:', error);
+        return {
+          ready: false,
+          status: 'error',
+          progress: 0,
+          file_size: 0
+        };
+      }
+    },
+
+    getPlaylistSongStatus(songId) {
+      // Check cache first
+      if (this.readinessCache.has(songId)) {
+        return this.readinessCache.get(songId);
+      }
+
+      // Check if we're already checking this song to avoid duplicates
+      if (this._checking && this._checking.has(songId)) {
+        return { status: 'checking', progress: 0 };
+      }
+
+      // Initialize checking set if it doesn't exist
+      if (!this._checking) {
+        this._checking = new Set();
+      }
+
+      // Mark as being checked
+      this._checking.add(songId);
+
+      // Check readiness and cache result
+      this.checkPlaylistSongReady(songId).then(result => {
+        this.readinessCache.set(songId, result);
+        this._checking.delete(songId);
+        // Use nextTick instead of forceUpdate to avoid infinite loops
+        this.$nextTick(() => {
+          this.$forceUpdate();
+        });
+      }).catch(error => {
+        console.error('Error checking song readiness:', error);
+        this._checking.delete(songId);
+        // Default to error state
+        this.readinessCache.set(songId, { ready: false, status: 'error', progress: 0 });
+      });
+
+      return { status: 'checking', progress: 0 };
+    },
+
+    getPlaylistSongStatusText(songId) {
+      const status = this.getPlaylistSongStatus(songId);
+
+
+      if (typeof status === 'boolean') {
+        // Legacy support for old cache entries
+        return status ? '● Listo' : '● Descargando...';
+      }
+
+      switch (status.status) {
+        case 'completed':
+          return '● Listo';
+        case 'downloading':
+          return '● Descargando...';
+        case 'not_found':
+          return '● Listo'; // En modo streaming, no se descarga
+        case 'checking':
+          return '● Listo'; // En modo streaming, siempre está listo
+        case 'error':
+          return '● Error';
+        default:
+          return '● Listo'; // Por defecto, mostrar como listo
+      }
+    },
+
+    getPlaylistSongStatusColor(songId) {
+      const status = this.getPlaylistSongStatus(songId);
+
+      if (typeof status === 'boolean') {
+        // Legacy support for old cache entries
+        return status ? 'var(--spotify-green)' : '#ffa500';
+      }
+
+      switch (status.status) {
+        case 'completed':
+          return 'var(--spotify-green)';
+        case 'downloading':
+          return '#ffa500';
+        case 'not_found':
+          return '#ff6b6b';
+        case 'checking':
+          return 'var(--spotify-text-subdued)';
+        case 'error':
+          return '#ff3333';
+        default:
+          return 'var(--spotify-text-subdued)';
+      }
+    },
+
+    isPlaylistSongReady(songId) {
+      const status = this.getPlaylistSongStatus(songId);
+
+      if (typeof status === 'boolean') {
+        // Legacy support for old cache entries
+        return status;
+      }
+
+      return status.status === 'completed';
+    },
+
+    async pollDownloadProgress(songId) {
+      // Check if song is already completed
+      const existingStatus = this.readinessCache.get(songId);
+      if (existingStatus && existingStatus.status === 'completed') {
+        return; // Don't poll completed songs
+      }
+
+      const maxAttempts = 120; // Max 2 minutes of polling
+      let attempts = 0;
+
+      const poll = async () => {
+        if (attempts >= maxAttempts) {
+          console.log(`Polling timeout for ${songId}`);
+          return;
+        }
+
+        attempts++;
+
+        try {
+          const response = await fetch(`/ready/${songId}`);
+          const data = await response.json();
+
+          // Update cache with current status
+          this.readinessCache.set(songId, {
+            ready: response.ok && data.ready,
+            status: data.status || 'checking',
+            progress: data.progress || 0,
+            file_size: data.file_size || 0
+          });
+
+          // Force UI update
+          this.$forceUpdate();
+
+          // If download is complete, stop polling
+          if (response.ok && data.ready && data.status === 'completed') {
+            console.log(`✅ Download completed for ${songId}`);
+            return;
+          }
+
+          // If still downloading or checking, continue polling
+          if (data.status === 'downloading' || data.status === 'checking' || data.status === 'not_found') {
+            setTimeout(poll, 1000); // Poll every second
+          }
+
+        } catch (error) {
+          console.error('Error polling download progress:', error);
+          // Don't immediately set error, retry a few times
+          if (attempts < 5) {
+            setTimeout(poll, 2000); // Retry after 2 seconds
+          } else {
+            // Set error status and stop polling
+            this.readinessCache.set(songId, {
+              ready: false,
+              status: 'error',
+              progress: 0,
+              file_size: 0
+            });
+            this.$forceUpdate();
+          }
+        }
+      };
+
+      // Start polling immediately
+      poll();
+    },
+
+    // ---- Dropdown management ----
+    togglePlaylistDropdown(song) {
+      // Cerrar todos los otros dropdowns primero
+      this.closeAllDropdowns();
+
+      // Asegurar que la propiedad reactiva existe
+      if (!song.hasOwnProperty('_showPlaylists')) {
+        this.$set(song, '_showPlaylists', false);
+      }
+
+      // Toggle el dropdown actual
+      song._showPlaylists = !song._showPlaylists;
+    },
+
+    closeAllDropdowns() {
+      // Cerrar todos los dropdowns de resultados de búsqueda
+      this.searchResults.forEach(song => {
+        if (song._showPlaylists) {
+          song._showPlaylists = false;
+        }
+      });
+      this.$forceUpdate();
+    },
+
+    // ---- UX State Functions ----
+    getTrackStateClass(track) {
+      if (track._optimistic && track._loading) return 'loading';
+      if (track._optimistic && track._processing) return 'processing';
+      if (track._failed) return 'failed';
+      return '';
+    },
+
+    getTrackStatusClass(track) {
+      if (track._optimistic && track._loading) return 'loading';
+      if (track._optimistic && track._processing) return 'processing';
+      if (track._failed) return 'failed';
+      if (track.seconds) return 'ready';
+      return 'processing';
+    },
+
+    getTrackStatusText(track) {
+      if (track._optimistic && track._loading) return 'Añadiendo...';
+      if (track._optimistic && track._processing) return 'Procesando...';
+      if (track._failed) return 'Error';
+      if (track.seconds) return 'Listo';
+      return 'Cargando...';
+    },
+
+    isTrackProcessing(track) {
+      return (track._optimistic && track._loading) ||
+             (track._optimistic && track._processing) ||
+             (!track.seconds && !track._failed);
+    },
+
+    // Update refreshQueue to handle optimistic updates
+    async refreshQueue() {
+      const before = Date.now();
+      try {
+        const resp = await fetch(`/api/rooms/${this.roomName}/queue`);
+        if (resp.ok) {
+          const newQueue = await resp.json();
+
+          // Remove optimistic tracks that are now in the real queue
+          newQueue.forEach(realTrack => {
+            const optimisticIndex = this.queue.findIndex(t => t.id === realTrack.id && t._optimistic);
+            if (optimisticIndex !== -1) {
+              this.queue.splice(optimisticIndex, 1);
+              console.log(`[UX] Removed optimistic track ${realTrack.id} - now real`);
+            }
+          });
+
+          // Update queue with real data
+          this.queue = [...this.queue.filter(t => t._optimistic), ...newQueue];
+
+          console.log(`[QUEUE] Updated. Duration: ${Date.now() - before}ms`);
+        }
+      } catch(e) {
+        console.error('[QUEUE] Error:', e);
+      }
+    }
+  },
+
+  mounted() {
+    // Initialize values
+    if (!this.rate || this.rate < 0.5) this.rate = 1;
+    if (this.volume <= 0) this.volume = 0.8;
+
+    // Load playlist volume settings
+    this.loadPlaylistVolume();
+
+    // Initialize Hybrid Player System
+    this.$nextTick(() => {
+      console.log('[HYBRID] Initializing hybrid player system...');
+
+      // Detectar tipo de dispositivo primero
+      this.detectMobileDevice();
+      this.setupUserInteractionHandlers();
+
+      // Detectar ad blocker (solo desktop)
+      if (!this.isMobile) {
+        console.log('[HYBRID] Desktop detected - initializing YouTube Player');
+        this.detectAdBlocker();
+      } else {
+        console.log('[HYBRID] Mobile device detected - will also try YouTube Player for serverless mode');
+      }
+
+      // Inicializar YouTube Player en TODOS los dispositivos para modo serverless
+      if (typeof YT !== 'undefined' && YT.Player) {
+        this.initYouTubePlayer();
+      } else {
+        // Wait for YouTube API to load
+        window.onYouTubeIframeAPIReady = () => {
+          console.log('[HYBRID] YouTube API loaded, initializing player');
+          this.initYouTubePlayer();
+        };
+      }
+
+      // Debug: mostrar estado del sistema
+      console.log('[HYBRID] System status:', {
+        isMobile: this.isMobile,
+        userInteracted: this.userInteracted,
+        youtubePlayerReady: this.youtubePlayerReady
+      });
+    });
+
+    // Setup audio element
+    const audio = document.getElementById('audio');
+
+    // Apply volume, rate and mute from localStorage immediately
+    this.applyVolume();
+    this.applyRate();
+    audio.muted = this.muted;
+
+    audio.addEventListener('canplay', () => {
+      // Ensure volume and mute are applied when audio is ready
+      this.applyVolume();
+      audio.muted = this.muted;
+      if (this.state.playing) this.enableAudio();
+
+      // Limpiar contador de reintentos al cargar exitosamente
+      if (this.state.current && this._audioRetries) {
+        delete this._audioRetries[this.state.current.id];
+      }
+    });
+
+    // Also apply volume when audio loads
+    audio.addEventListener('loadeddata', () => {
+      this.applyVolume();
+    });
+
+    // Handle streaming errors (URLs expiradas, CORS, etc)
+    audio.addEventListener('error', async (e) => {
+      // Si estamos usando YouTube Player, ignorar errores del audio element
+      if (this.isUsingYouTubePlayer) {
+        return;
+      }
+
+      console.error('Error en audio stream:', e);
+      if (this.state.current) {
+        // Evitar bucle infinito: no reintentar si está en "Procesando..."
+        if (this.state.current.title === 'Procesando...') {
+          console.log('Track aún procesando, esperando...');
+          return;
+        }
+
+        // Limitar reintentos
+        if (!this._audioRetries) this._audioRetries = {};
+        const currentId = this.state.current.id;
+        this._audioRetries[currentId] = (this._audioRetries[currentId] || 0) + 1;
+
+        if (this._audioRetries[currentId] > 3) {
+          console.error('Demasiados reintentos para', currentId);
+          // Pausar el audio element, no el componente
+          audio.pause();
+          delete this._audioRetries[currentId];
+          return;
+        }
+
+        console.log(`Intentando refrescar stream (intento ${this._audioRetries[currentId]}/3)...`);
+        // El backend auto-refresca la URL en /stream/{id}
+        audio.src = `/stream/${currentId}?t=${Date.now()}`;
+        if (this.state.playing) {
+          setTimeout(() => audio.play().catch(console.error), 500);
+        }
+      }
+    });
+
+    // Handle end of track - auto advance to next
+    audio.addEventListener('ended', () => {
+      console.log('Canción terminada, avanzando a la siguiente...');
+      this.next();
+    });
+
+    // Load available rooms
+    this.loadRooms();
+
+    // Connect WebSocket and start polling
+    this.connectWS();
+    this.pollTimer = setInterval(this.refreshQueue, 8000); // Reduced frequency from 4s to 8s
+
+    // Initial refreshes
+    this.refreshQueue();
+    setTimeout(this.refreshQueue, 1200);
+    setTimeout(this.refreshQueue, 3000);
+  },
+
+  beforeDestroy() {
+    if (this.pollTimer) clearInterval(this.pollTimer);
+  }
+});
+</script>
+</body>
+</html>

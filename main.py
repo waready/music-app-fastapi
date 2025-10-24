@@ -11,6 +11,15 @@ import yt_dlp
 from youtube_search import YoutubeSearch
 import bcrypt
 
+# Importaciones de pytubefix (comentadas temporalmente hasta instalar)
+try:
+    from pytubefix import YouTube, Search
+    from pytubefix.exceptions import VideoUnavailable, PytubeFixError
+    PYTUBEFIX_AVAILABLE = True
+except ImportError:
+    PYTUBEFIX_AVAILABLE = False
+    print("[WARNING] pytubefix no está instalado. Funciones de pytubefix deshabilitadas.")
+
 # Modo de streaming: "direct" (desde YouTube) o "download" (descargar MP3)
 STREAMING_MODE = os.getenv("STREAMING_MODE", "direct")
 MEDIA_DIR = "media"
@@ -188,6 +197,10 @@ async def search_youtube_async(query: str, max_results: int = 20) -> List[Dict[s
 
 def _search_youtube_pytubefix(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
     """Buscar videos en YouTube usando pytubefix con PO Tokens (reemplazo de yt-dlp)"""
+    if not PYTUBEFIX_AVAILABLE:
+        print("[PYTUBEFIX] No disponible, usando fallback")
+        return []
+
     try:
         print(f"[PYTUBEFIX] Buscando con cliente WEB: {query} (max: {max_results})")
         # Usar cliente WEB para evitar bot detection (requiere nodejs en producción)
@@ -273,6 +286,9 @@ def _get_yt_stream_info_deprecated(url_or_id: str) -> Dict[str, Any]:
 
 def _get_yt_stream_info_pytubefix(url_or_id: str) -> Dict[str, Any]:
     """Extrae metadata + URL de streaming usando pytubefix (reemplazo de yt-dlp)"""
+    if not PYTUBEFIX_AVAILABLE:
+        raise Exception("pytubefix no está disponible")
+
     db = db_read()
 
     # Si ya existe, verificar si podemos usarlo
@@ -324,6 +340,7 @@ def _get_yt_stream_info_pytubefix(url_or_id: str) -> Dict[str, Any]:
             "id": vid,
             "title": title,
             "seconds": duration,
+            "duration": duration,  # Sincronizar ambos campos
             "stream_url": stream_url,
             "timestamp": time.time(),
             "thumbnail": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
@@ -352,6 +369,7 @@ def _get_yt_stream_info_pytubefix(url_or_id: str) -> Dict[str, Any]:
         "id": url_or_id,
         "title": f"Video {url_or_id} (No disponible)",
         "seconds": 0,
+        "duration": 0,  # Sincronizar ambos campos
         "timestamp": time.time(),
         "error": error_msg,
         "mode": "unavailable"
@@ -382,8 +400,77 @@ def _download_yt_to_mp3(url_or_id: str) -> Dict[str, Any]:
     raise Exception("Modo download no implementado con pytubefix")
     # DEPRECATED: Código comentado - usar pytubefix
 
+async def extract_video_metadata(video_id: str) -> Dict[str, Any]:
+    """Extrae metadata usando sistema híbrido (sin yt-dlp)"""
+    try:
+        print(f"[HYBRID-EXTRACT] Extracting metadata for {video_id}")
+
+        # **NUEVA ESTRATEGIA**: Usar sistema híbrido directo (sin yt-dlp)
+
+        # Buscar metadata usando YouTube Search
+        search_results = await search_youtube_async(video_id, max_results=5)
+
+        title = f"YouTube Video {video_id}"
+        duration = 180  # Default fallback
+        uploader = "Unknown"
+        thumbnail = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+        description = ""
+
+        # Buscar el video específico en los resultados
+        for result in search_results:
+            if result.get('id', {}).get('videoId') == video_id:
+                title = result.get('snippet', {}).get('title', title)
+                uploader = result.get('snippet', {}).get('channelTitle', uploader)
+                description = result.get('snippet', {}).get('description', '')[:200] + '...' if result.get('snippet', {}).get('description') else ''
+                thumb_data = result.get('snippet', {}).get('thumbnails', {})
+                if 'medium' in thumb_data:
+                    thumbnail = thumb_data['medium'].get('url', thumbnail)
+                break
+
+        # Intentar obtener duración real usando YouTube Data API
+        try:
+            duration_data = await get_video_duration_api(video_id)
+            if duration_data:
+                duration = duration_data
+                print(f"[HYBRID-EXTRACT] Found real duration: {duration}s")
+        except Exception as e:
+            print(f"[HYBRID-EXTRACT] Could not get duration, using fallback: {e}")
+
+        metadata = {
+            "id": video_id,
+            "title": title,
+            "duration": duration,
+            "seconds": duration,
+            "uploader": uploader,
+            "view_count": 0,
+            "upload_date": None,
+            "description": description,
+            "thumbnail": thumbnail,
+            "source": "hybrid_extract"
+        }
+
+        print(f"[HYBRID-EXTRACT] Successfully extracted: {metadata['title']} ({metadata['duration']}s)")
+        return metadata
+
+    except Exception as e:
+        print(f"[HYBRID-EXTRACT] Error extracting metadata for {video_id}: {str(e)}")
+
+        # Fallback básico
+        return {
+            "id": video_id,
+            "title": f"YouTube Video {video_id}",
+            "duration": 180,
+            "seconds": 180,
+            "uploader": "Unknown",
+            "view_count": 0,
+            "upload_date": None,
+            "description": "",
+            "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
+            "source": "hybrid_fallback"
+        }
+
 async def ensure_track(url_or_id: str) -> Dict[str, Any]:
-    """Crea track básico para gestión de cola sin descargas pesadas"""
+    """Crea track con metadata simplificado usando solo búsqueda de YouTube"""
     db = db_read()
 
     # Extraer video ID de URL si es necesario
@@ -399,23 +486,147 @@ async def ensure_track(url_or_id: str) -> Dict[str, Any]:
     if video_id in db:
         return db[video_id]
 
-    # Crear registro básico para gestión de cola (sin procesamiento pesado)
-    record = {
-        "id": video_id,
-        "title": f"YouTube Video {video_id}",  # Título placeholder
-        "seconds": 180,  # Duración placeholder (3 minutos)
-        "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
-        "mode": "lightweight",  # Modo liviano sin descargas
-        "timestamp": time.time(),
-        "url": f"https://www.youtube.com/watch?v={video_id}"
-    }
+    print(f"[HYBRID-TRACK] Creando track híbrido para {video_id}")
+
+    # **NUEVA ESTRATEGIA**: Buscar metadata usando YouTube Search directamente
+    try:
+        # Buscar el video por ID
+        search_results = await search_youtube_async(video_id, max_results=5)
+
+        title = f"YouTube Video {video_id}"
+        duration = 180  # Default fallback
+        uploader = "Unknown"
+        thumbnail = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+
+        # Buscar el video específico en los resultados
+        for result in search_results:
+            if result.get('id', {}).get('videoId') == video_id:
+                title = result.get('snippet', {}).get('title', title)
+                uploader = result.get('snippet', {}).get('channelTitle', uploader)
+                thumb_data = result.get('snippet', {}).get('thumbnails', {})
+                if 'medium' in thumb_data:
+                    thumbnail = thumb_data['medium'].get('url', thumbnail)
+                break
+
+        # Intentar obtener duración real usando YouTube Data API
+        try:
+            duration_data = await get_video_duration_api(video_id)
+            if duration_data:
+                duration = duration_data
+                print(f"[HYBRID-TRACK] Found real duration: {duration}s")
+        except Exception as e:
+            print(f"[HYBRID-TRACK] Could not get duration, using fallback: {e}")
+
+        # Crear registro híbrido
+        record = {
+            "id": video_id,
+            "title": title,
+            "seconds": duration,
+            "duration": duration,
+            "thumbnail": thumbnail,
+            "uploader": uploader,
+            "mode": "hybrid",  # Siempre usar modo híbrido
+            "timestamp": time.time(),
+            "url": f"https://www.youtube.com/watch?v={video_id}",
+            "source": "hybrid_search"
+        }
+
+        print(f"[HYBRID-TRACK] Track creado: {record['title']} ({record['seconds']}s)")
+
+    except Exception as e:
+        print(f"[HYBRID-TRACK] Error obteniendo metadata, usando placeholder: {e}")
+
+        # Fallback básico si todo falla
+        record = {
+            "id": video_id,
+            "title": f"YouTube Video {video_id}",
+            "seconds": 180,
+            "duration": 180,
+            "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
+            "mode": "hybrid",
+            "timestamp": time.time(),
+            "url": f"https://www.youtube.com/watch?v={video_id}",
+            "source": "hybrid_fallback"
+        }
 
     # Guardar en DB
     db[video_id] = record
     db_write(db)
 
-    print(f"[LIGHTWEIGHT] Track creado para cola: {video_id}")
     return record
+
+# ---- Streaming con Range ----
+CHUNK = 1024 * 1024
+def ranged_stream(file_path: str, start: int, end: int):
+    with open(file_path, "rb") as f:
+        f.seek(start)
+        bytes_left = end - start + 1
+        while bytes_left > 0:
+            chunk = f.read(min(CHUNK, bytes_left))
+            if not chunk: break
+            bytes_left -= len(chunk)
+            yield chunk
+
+# ---- Estado del Player (servidor autoritativo) ----
+class PlayerState:
+    def __init__(self):
+        self.current_id: Optional[str] = None
+        self.duration: float = 0.0
+        self.started_at: Optional[float] = None  # epoch seconds cuando comenzó
+        self.paused: bool = False
+        self.paused_at: float = 0.0
+
+    def playing(self) -> bool:
+        return self.current_id is not None and not self.paused
+
+    def pos(self) -> float:
+        if not self.current_id: return 0.0
+        if self.paused: return self.paused_at
+        if self.started_at is None: return 0.0
+        return max(0.0, time.time() - self.started_at)
+
+# ---- Room Management ----
+class Room:
+    def __init__(self, room_id: str, name: str = "", created_by: Optional[str] = None,
+                 is_public: bool = True, password_hash: Optional[str] = None):
+        self.id = room_id
+        self.name = name or f"Room {room_id}"
+        self.created_by = created_by  # user_id del creador
+        self.is_public = is_public  # True = pública, False = privada
+        self.password_hash = password_hash  # Hash bcrypt de la contraseña (solo para privadas)
+        self.queue: List[str] = []
+        self.player = PlayerState()
+        self.connections: set[WebSocket] = set()
+        self.state_lock = asyncio.Lock()
+        self.queue_lock = asyncio.Lock()
+
+    async def get_queue_detailed(self) -> List[Dict[str, Any]]:
+        async with self.queue_lock:
+            db = db_read()
+            return [db[i] for i in self.queue if i in db]
+
+    def public_state(self) -> Dict[str, Any]:
+        db = db_read()
+        cur = db.get(self.player.current_id) if self.player.current_id else None
+        pos = self.player.pos()
+        return {
+            "playing": self.player.playing(),
+            "position": pos,
+            "positionLabel": mmss(pos),
+            "duration": (cur or {}).get("seconds", 0),
+            "durationLabel": mmss((cur or {}).get("seconds", 0)),
+            "current": {"id": cur["id"], "title": cur["title"]} if cur else None,
+        }
+
+    async def broadcast(self, payload: Dict[str, Any]):
+        dead = []
+        for ws in list(self.connections):
+            try:
+                await ws.send_json(payload)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.connections.discard(ws)
 
 # ---- Streaming con Range ----
 CHUNK = 1024 * 1024
@@ -497,6 +708,11 @@ rooms_lock = asyncio.Lock()
 async def get_or_create_room(room_id: str, user_id: Optional[str] = None,
                              is_public: bool = True, password_hash: Optional[str] = None) -> Room:
     """Obtiene o crea una room"""
+    # BLOQUEAR room problemática que causa conflictos con la cola
+    if room_id == "Default Room":
+        print(f"[BLOCKED] Redirecting blocked room '{room_id}' to 'default'")
+        room_id = "default"
+
     async with rooms_lock:
         if room_id not in rooms:
             # Intentar cargar de disco
@@ -568,83 +784,98 @@ async def room_broadcast_state(room: Room):
 async def room_broadcast_queue(room: Room):
     await room.broadcast({"type": "queue:update", "data": await room.get_queue_detailed()})
 
-async def room_maybe_autostart(room: Room):
-    async with room.state_lock:
-        print(f"[DEBUG] room_maybe_autostart for room {room.id}: current_id={room.player.current_id}, queue_len={len(room.queue)}")
-        if room.player.current_id:
-            print(f"[DEBUG] Already playing {room.player.current_id}, skipping autostart")
-            return
+async def room_maybe_autostart_internal(room: Room):
+    # Función interna que asume que room.state_lock ya está adquirido
+    print(f"[DEBUG] room_maybe_autostart_internal for room {room.id}: current_id={room.player.current_id}, queue_len={len(room.queue)}")
+    if room.player.current_id:
+        print(f"[DEBUG] Already playing {room.player.current_id}, skipping autostart")
+        return
 
-        # Buscar el siguiente track válido sin recursión para evitar consumir toda la cola
-        max_attempts = min(10, len(room.queue))  # Máximo 10 intentos para evitar bucles infinitos
-        attempts = 0
-        next_id = None
-        meta = None
+    # Buscar el siguiente track válido sin recursión para evitar consumir toda la cola
+    max_attempts = min(10, len(room.queue))  # Máximo 10 intentos para evitar bucles infinitos
+    attempts = 0
+    next_id = None
+    meta = None
 
-        while attempts < max_attempts:
-            next_id = await room_shift_queue(room)
-            print(f"[DEBUG] Attempt {attempts + 1}: Shifted next_id: {next_id}")
+    while attempts < max_attempts:
+        next_id = await room_shift_queue(room)
+        print(f"[DEBUG] Attempt {attempts + 1}: Shifted next_id: {next_id}")
 
-            if not next_id:
-                print(f"[DEBUG] No more tracks in queue, broadcasting empty state")
-                await room_broadcast_state(room)
-                return
-
-            db = db_read()
-            meta = db.get(next_id)
-
-            if meta:
-                print(f"[DEBUG] Found valid track {next_id}: {meta.get('title')}")
-                break
-            else:
-                print(f"[DEBUG] Track {next_id} not found in DB, trying next track")
-                # Intentar extraer metadata para este track
-                try:
-                    print(f"[DEBUG] Attempting to extract metadata for {next_id}")
-                    extracted_meta = await extract_track_metadata(next_id)
-                    if extracted_meta:
-                        meta = extracted_meta
-                        print(f"[DEBUG] Successfully extracted metadata for {next_id}: {meta.get('title')}")
-                        break
-                    else:
-                        print(f"[DEBUG] Failed to extract metadata for {next_id}")
-                except Exception as e:
-                    print(f"[DEBUG] Error extracting metadata for {next_id}: {e}")
-
-            attempts += 1
-
-        if not meta:
-            print(f"[DEBUG] No valid tracks found after {attempts} attempts, broadcasting empty state")
+        if not next_id:
+            print(f"[DEBUG] No more tracks in queue, broadcasting empty state")
             await room_broadcast_state(room)
             return
 
-        print(f"[DEBUG] Starting track {next_id}: {meta.get('title')}")
-        room.player.current_id = next_id
+        db = db_read()
+        meta = db.get(next_id)
 
-        # Verificar si es modo híbrido
-        if meta.get("mode") == "hybrid":
-            print(f"[HYBRID] Track {next_id} is in hybrid mode, using client-side player")
-            # Para modo híbrido, usar duración placeholder - el cliente actualizará la duración real
-            room.player.duration = 300.0  # 5 minutos placeholder
+        if meta:
+            print(f"[DEBUG] Found valid track {next_id}: {meta.get('title')}")
+            break
         else:
-            # Modo tradicional con yt-dlp
-            room.player.duration = float(meta.get("seconds") or 0)
+            print(f"[DEBUG] Track {next_id} not found in DB, skipping track")
+            # TODO: Implementar extracción de metadata si es necesario
+            # # Intentar extraer metadata para este track
+            # try:
+            #     print(f"[DEBUG] Attempting to extract metadata for {next_id}")
+            #     extracted_meta = await extract_track_metadata(next_id)
+            #     if extracted_meta:
+            #         meta = extracted_meta
+            #         print(f"[DEBUG] Successfully extracted metadata for {next_id}: {meta.get('title')}")
+            #         break
+            #     else:
+            #         print(f"[DEBUG] Failed to extract metadata for {next_id}")
+            # except Exception as e:
+            #     print(f"[DEBUG] Error extracting metadata for {next_id}: {e}")
 
-        room.player.paused = False
-        room.player.paused_at = 0.0
-        room.player.started_at = time.time()
-        print(f"[DEBUG] Player state: current_id={room.player.current_id}, paused={room.player.paused}, playing={room.player.playing()}, mode={meta.get('mode', 'traditional')}")
+        attempts += 1
+
+    if not meta:
+        print(f"[DEBUG] No valid tracks found after {attempts} attempts, broadcasting empty state")
+        await room_broadcast_state(room)
+        return
+
+    print(f"[DEBUG] Starting track {next_id}: {meta.get('title')}")
+    room.player.current_id = next_id
+
+    # Verificar si es modo híbrido
+    if meta.get("mode") == "hybrid":
+        print(f"[HYBRID] Track {next_id} is in hybrid mode, using client-side player")
+        # Para modo híbrido, usar duración de metadatos si está disponible, sino placeholder
+        existing_duration = float(meta.get("seconds") or meta.get("duration") or 0)
+        room.player.duration = existing_duration if existing_duration > 0 else 240.0  # 4 minutos placeholder
+        print(f"[HYBRID] Using duration: {room.player.duration}s ({'from metadata' if existing_duration > 0 else 'placeholder'})")
+    else:
+        # Modo tradicional con yt-dlp
+        room.player.duration = float(meta.get("seconds") or 0)
+
+    room.player.paused = False
+    room.player.paused_at = 0.0
+    room.player.started_at = time.time()
+    print(f"[DEBUG] Player state: current_id={room.player.current_id}, paused={room.player.paused}, playing={room.player.playing()}, mode={meta.get('mode', 'traditional')}")
     await room.broadcast({"type":"player:next","data":{"current":{"id":meta["id"],"title":meta["title"]}}})
     await room_broadcast_state(room)
 
-async def room_cmd_play(room: Room, at: Optional[float] = None):
+async def room_maybe_autostart(room: Room):
+    # Función wrapper que adquiere el lock
     async with room.state_lock:
+        await room_maybe_autostart_internal(room)
+
+async def room_cmd_play(room: Room, at: Optional[float] = None):
+    # print(f"[DEBUG] room_cmd_play: Entering function for room {room.id}")  # Comentado
+    async with room.state_lock:
+        # print(f"[DEBUG] room_cmd_play: Acquired state_lock")  # Comentado
         if not room.player.current_id:
-            await room_maybe_autostart(room); return
-        if not room.player.paused: return
+            print(f"[PLAY] No current track, starting autoplay from queue")
+            await room_maybe_autostart_internal(room)
+            return
+        if not room.player.paused:
+            # print(f"[DEBUG] room_cmd_play: Already playing, returning")  # Comentado
+            return
         seek = room.player.paused_at if at is None else max(0.0, float(at))
         room.player.started_at = time.time() - seek
         room.player.paused = False
+        print(f"[PLAY] Resumed playback at {seek}s")
     await room_broadcast_state(room)
 
 async def room_cmd_pause(room: Room):
@@ -826,6 +1057,7 @@ async def api_update_track_metadata(payload: TrackMetadata):
 
         if payload.seconds and payload.seconds > 0:
             track["seconds"] = payload.seconds
+            track["duration"] = payload.seconds  # Sincronizar ambos campos
             updated = True
 
         if updated:
@@ -842,6 +1074,67 @@ async def api_update_track_metadata(payload: TrackMetadata):
                 print(f"[METADATA] Broadcasting error (non-critical): {e}")
 
         return {"success": updated, "id": payload.id}
+
+async def get_video_duration_api(video_id: str) -> int:
+    """Obtiene la duración real de un video usando YouTube Data API v3"""
+    try:
+        import httpx
+        import re
+
+        # API key para YouTube Data API (pública, limitada)
+        api_key = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
+
+        # URL de la YouTube Data API para obtener detalles del video
+        url = f"https://www.googleapis.com/youtube/v3/videos"
+        params = {
+            "part": "contentDetails",
+            "id": video_id,
+            "key": api_key,
+            "fields": "items(contentDetails/duration)"
+        }
+
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(url, params=params)
+
+            if response.status_code == 200:
+                data = response.json()
+                items = data.get("items", [])
+
+                if items:
+                    duration_iso = items[0].get("contentDetails", {}).get("duration", "")
+
+                    if duration_iso:
+                        # Convertir ISO 8601 duration (PT4M13S) a segundos
+                        duration_seconds = parse_iso8601_duration(duration_iso)
+                        print(f"[YT-API] Duration for {video_id}: {duration_seconds}s ({duration_iso})")
+                        return duration_seconds
+
+        print(f"[YT-API] No duration found for {video_id}")
+        return None
+
+    except Exception as e:
+        print(f"[YT-API] Error getting duration for {video_id}: {e}")
+        return None
+
+def parse_iso8601_duration(duration_str: str) -> int:
+    """Convierte duración ISO 8601 (PT4M13S) a segundos"""
+    try:
+        import re
+        # Patrón para PT4M13S o PT1H2M3S
+        pattern = r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?'
+        match = re.match(pattern, duration_str)
+
+        if match:
+            hours = int(match.group(1) or 0)
+            minutes = int(match.group(2) or 0)
+            seconds = int(match.group(3) or 0)
+
+            total_seconds = hours * 3600 + minutes * 60 + seconds
+            return total_seconds
+
+        return 180  # fallback
+    except:
+        return 180  # fallback
 
 async def check_ytdlp_rate_limit():
     """Verifica y aplica rate limiting para yt-dlp según documentación oficial"""
@@ -874,353 +1167,86 @@ async def check_ytdlp_rate_limit():
 
 @app.get("/api/metadata/{video_id}")
 async def api_get_metadata(video_id: str):
-    """Obtiene metadata de YouTube usando yt-dlp sin descargar el video"""
+    """Obtiene metadata de YouTube usando búsqueda híbrida (sin yt-dlp)"""
     try:
-        print(f"[YT-DLP] Extracting metadata for {video_id}")
+        print(f"[HYBRID-API] Extracting metadata for {video_id}")
 
-        # Aplicar rate limiting antes de hacer el request
-        await check_ytdlp_rate_limit()
+        # **NUEVA ESTRATEGIA**: Desactivar yt-dlp completamente y usar híbrido
 
-        # Detectar si estamos en un entorno con Chrome disponible
-        def has_chrome_available():
-            chrome_paths = [
-                "/opt/render/.config/google-chrome",  # Render
-                os.path.expanduser("~/.config/google-chrome"),  # Linux
-                os.path.expanduser("~/Library/Application Support/Google/Chrome"),  # macOS
-                os.path.expanduser("~/AppData/Local/Google/Chrome/User Data"),  # Windows
-            ]
-            return any(os.path.exists(path) for path in chrome_paths)
-
-        # Configurar yt-dlp con técnicas ULTIMATE PLUS anti-bot según documentación oficial
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': False,
-            'skip_download': True,
-            'format': 'worst',  # Solo metadata, no necesitamos calidad
-
-            # Headers anti-bot más realistas (Chrome en Android más reciente)
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 14; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'DNT': '1',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Sec-Fetch-User': '?1',
-                'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-                'Sec-Ch-Ua-Mobile': '?1',
-                'Sec-Ch-Ua-Platform': '"Android"',
-                'Cache-Control': 'max-age=0',
-                'Referer': 'https://www.youtube.com/',
-            },
-
-            # Configuración avanzada PLUS según documentación yt-dlp
-            'extractor_args': {
-                'youtube': {
-                    # Priorizar cliente Android exclusivamente (más confiable según docs)
-                    'player_client': ['android'],
-                    # Saltar webpage completamente para evitar cookies VISITOR_INFO1_LIVE
-                    'player_skip': ['webpage', 'configs'],
-                    # Usar innertube API directamente sin webpage
-                    'skip': ['webpage'],
-                    # Usar API key para better reliability (opcional según docs)
-                    'api_key': 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8',
+        # Intentar obtener metadata de la base de datos primero
+        async with _db_lock:
+            db = db_read()
+            existing_track = db.get(video_id)
+            if existing_track and not existing_track.get('title', '').startswith('YouTube Video'):
+                print(f"[HYBRID-API] Using existing metadata from database for {video_id}")
+                return {
+                    "id": video_id,
+                    "title": existing_track.get('title', f'YouTube Video {video_id}'),
+                    "duration": existing_track.get('seconds', 180),
+                    "seconds": existing_track.get('seconds', 180),
+                    "uploader": existing_track.get('uploader', 'Unknown'),
+                    "thumbnail": existing_track.get('thumbnail', f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg'),
+                    "source": "database_cached"
                 }
-            },
 
-            # Geo-bypass techniques según documentación
-            'geo_bypass': True,
-            'geo_bypass_country': 'US',  # Usar US como país por defecto
-            'geo_bypass_ip_block': None,  # No especificar bloque IP específico
+        # Buscar metadata usando YouTube Search
+        print(f"[HYBRID-API] Searching for {video_id} using YouTube Search")
+        search_results = await search_youtube_async(video_id, max_results=5)
 
-            # Source address consistency para estabilidad IP según docs
-            'source_address': None,  # Dejar que el sistema elija la mejor interfaz
+        title = f"YouTube Video {video_id}"
+        duration = 180  # Default fallback
+        uploader = "Unknown"
+        thumbnail = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+        description = ""
 
-            # Rate limiting más conservador según docs PLUS
-            'sleep_interval': 5,  # 5 segundos entre requests (más conservador)
-            'max_sleep_interval': 15,  # Hasta 15 segundos si hay problemas
-            'sleep_interval_requests': 1,  # 1 segundo entre requests HTTP individuales
-            'sleep_interval_subtitles': 0,  # Sin delay para subtítulos (no los usamos)
+        # Buscar el video específico en los resultados
+        for result in search_results:
+            if result.get('id', {}).get('videoId') == video_id:
+                title = result.get('snippet', {}).get('title', title)
+                uploader = result.get('snippet', {}).get('channelTitle', uploader)
+                description = result.get('snippet', {}).get('description', '')[:200] + '...' if result.get('snippet', {}).get('description') else ''
+                thumb_data = result.get('snippet', {}).get('thumbnails', {})
+                if 'medium' in thumb_data:
+                    thumbnail = thumb_data['medium'].get('url', thumbnail)
+                break
 
-            # Timeouts y reintentos más robustos para producción PLUS
-            'socket_timeout': 45,  # Timeout más largo para conexiones lentas
-            'retries': 8,  # Más reintentos
-            'fragment_retries': 8,  # Reintentos para fragmentos
-            'file_access_retries': 3,  # Reintentos para acceso a archivos
+        # Intentar obtener duración real usando YouTube Data API
+        try:
+            duration_data = await get_video_duration_api(video_id)
+            if duration_data:
+                duration = duration_data
+                print(f"[HYBRID-API] Found real duration: {duration}s")
+        except Exception as e:
+            print(f"[HYBRID-API] Could not get duration, using fallback: {e}")
 
-            # Configuración de chunks según docs: YouTube throttle >10MB chunks
-            'http_chunk_size': 1048576,  # 1MB chunks (mucho menor que 10MB)
-            'external_downloader_args': {'ffmpeg': ['-loglevel', 'error']},  # Silenciar ffmpeg
-
-            # Manejo de errores específicos según documentación PLUS
-            'retry_sleep_functions': {
-                'http': lambda n: min(6 * (2 ** (n - 1)), 120),  # Exponential backoff más agresivo
-                'fragment': lambda n: min(4 * (2 ** (n - 1)), 60),
-                'extractor': lambda n: min(2 * (2 ** (n - 1)), 30),
-            },
-
-            # Evitar problemas de encoding según docs
-            'encoding': 'utf-8',
-            'prefer_free_formats': True,  # Preferir formatos libres
-            'no_color': True,  # Sin colores en output
-
-            # Configuración adicional para estabilidad según docs
-            'ignoreerrors': False,  # No ignorar errores (queremos detectarlos)
-            'no_warnings': True,  # Pero sí suprimir warnings
-            'writeinfojson': False,  # No escribir JSON info
-            'writethumbnail': False,  # No escribir thumbnail
-            'writesubtitles': False,  # No escribir subtítulos
-            'writeautomaticsub': False,  # No escribir sub automáticos
+        metadata = {
+            "id": video_id,
+            "title": title,
+            "duration": duration,
+            "seconds": duration,
+            "uploader": uploader,
+            "description": description,
+            "thumbnail": thumbnail,
+            "source": "hybrid_api"
         }
 
-        # Agregar cookies solo si Chrome está disponible (para desarrollo local)
-        if has_chrome_available():
-            print("[YT-DLP] Chrome detectado, usando cookies para autenticidad máxima")
-            ydl_opts['cookiesfrombrowser'] = ('chrome', None, None, None)
-        else:
-            print("[YT-DLP] Chrome no disponible, usando configuración sin cookies (servidor)")
-            # En servidores sin Chrome, dependemos de headers y clients para autenticidad
-
-        video_url = f"https://www.youtube.com/watch?v={video_id}"
-
-        # Definir fallback de clientes según documentación yt-dlp (orden de confiabilidad)
-        # Incluye configuraciones especiales para servidores de producción
-        client_fallbacks = [
-            {
-                'name': 'android',
-                'config': ['android'],
-                'description': 'Cliente Android (más confiable según docs)',
-                'user_agent': 'Mozilla/5.0 (Linux; Android 14; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36'
-            },
-            {
-                'name': 'ios',
-                'config': ['ios'],
-                'description': 'Cliente iOS (segunda opción)',
-                'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1'
-            },
-            {
-                'name': 'web',
-                'config': ['web'],
-                'description': 'Cliente Web (tercera opción)',
-                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
-            },
-            {
-                'name': 'tv_embedded',
-                'config': ['tv_embedded'],
-                'description': 'Cliente TV embebido (última opción)',
-                'user_agent': 'Mozilla/5.0 (Linux; U; Android 9; KFMAWI Build/PS7312.3138N) AppleWebKit/537.36 (KHTML, like Gecko) Silk/122.3.1 like Chrome/122.0.6261.95 Safari/537.36'
-            },
-            {
-                'name': 'android_vr',
-                'config': ['android_vr'],
-                'description': 'Cliente Android VR (configuración especial)',
-                'user_agent': 'Mozilla/5.0 (Linux; Android 12; Quest 2) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/27.0.0.22.117 SamsungBrowser/4.0 Chrome/121.0.0.0 Mobile VR Safari/537.36'
-            },
-            {
-                'name': 'multi',
-                'config': ['android', 'ios', 'web'],
-                'description': 'Múltiples clientes (fallback final)',
-                'user_agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
-            }
-        ]
-
-        last_error = None
-
-        # Intentar cada cliente en orden de prioridad
-        for attempt, client_info in enumerate(client_fallbacks, 1):
-            try:
-                print(f"[YT-DLP] Intento {attempt}/6: {client_info['description']}")
-
-                # Crear configuración específica para este cliente
-                current_ydl_opts = ydl_opts.copy()
-                current_ydl_opts['extractor_args'] = {
-                    'youtube': {
-                        'player_client': client_info['config'],
-                        'player_skip': ['webpage', 'configs'],
-                        'skip': ['webpage'],
-                        'api_key': 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8',
-                    }
-                }
-
-                # Aplicar User-Agent específico para cada cliente
-                current_ydl_opts['http_headers'] = current_ydl_opts['http_headers'].copy()
-                current_ydl_opts['http_headers']['User-Agent'] = client_info['user_agent']
-
-                # Ajustar headers específicos según el tipo de cliente
-                if client_info['name'] in ['web', 'multi']:
-                    current_ydl_opts['http_headers']['Sec-Ch-Ua-Mobile'] = '?0'
-                    current_ydl_opts['http_headers']['Sec-Ch-Ua-Platform'] = '"Windows"'
-                elif client_info['name'] == 'ios':
-                    current_ydl_opts['http_headers']['Sec-Ch-Ua-Mobile'] = '?1'
-                    current_ydl_opts['http_headers']['Sec-Ch-Ua-Platform'] = '"iOS"'
-                elif client_info['name'] in ['android', 'android_vr']:
-                    current_ydl_opts['http_headers']['Sec-Ch-Ua-Mobile'] = '?1'
-                    current_ydl_opts['http_headers']['Sec-Ch-Ua-Platform'] = '"Android"'
-                elif client_info['name'] == 'tv_embedded':
-                    # TV no incluye estos headers
-                    current_ydl_opts['http_headers'].pop('Sec-Ch-Ua-Mobile', None)
-                    current_ydl_opts['http_headers'].pop('Sec-Ch-Ua-Platform', None)
-                    current_ydl_opts['http_headers'].pop('Sec-Ch-Ua', None)
-
-                # Para clientes problemáticos, configuraciones adicionales
-                if attempt >= 4:  # TV embedded y Android VR necesitan configuración especial
-                    print(f"[YT-DLP] Usando configuración especial para cliente {client_info['name']}")
-                    current_ydl_opts['sleep_interval'] = 8  # Más lento
-                    current_ydl_opts['socket_timeout'] = 60  # Timeout más largo
-                    # Reducir agresividad para videos problemáticos
-                    current_ydl_opts['extractor_args']['youtube']['player_skip'] = ['configs']  # Solo configs, no webpage
-
-                with yt_dlp.YoutubeDL(current_ydl_opts) as ydl:
-                    # Extraer solo la información del video
-                    info = ydl.extract_info(video_url, download=False)
-
-                    metadata = {
-                        "id": video_id,
-                        "title": info.get('title', f'YouTube Video {video_id}'),
-                        "duration": info.get('duration', 180),
-                        "seconds": info.get('duration', 180),
-                        "uploader": info.get('uploader', 'Unknown'),
-                        "view_count": info.get('view_count', 0),
-                        "upload_date": info.get('upload_date', None),
-                        "description": info.get('description', '')[:200] + '...' if info.get('description') else '',
-                        "thumbnail": info.get('thumbnail', f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg'),
-                        "source": f"yt-dlp-{client_info['name']}"
-                    }
-
-                    print(f"[YT-DLP] Éxito con cliente {client_info['name']}: {metadata['title'][:50]}...")
-                    break  # Salir del loop si fue exitoso
-
-            except Exception as e:
-                error_str = str(e)
-                last_error = error_str
-                print(f"[YT-DLP] Cliente {client_info['name']} falló: {error_str[:100]}...")
-
-                # Si es el último intento, lanzar el error
-                if attempt == len(client_fallbacks):
-                    print(f"[YT-DLP] Todos los clientes fallaron para {video_id}")
-                    raise e
-
-                # Para errores específicos, saltar al siguiente cliente inmediatamente
-                if any(phrase in error_str for phrase in [
-                    'Failed to extract any player response',
-                    'Unable to extract Initial JS player',
-                    'Video unavailable',
-                    'Private video'
-                ]):
-                    print(f"[YT-DLP] Error crítico, probando siguiente cliente...")
-                    continue
-
-                # Para otros errores, esperar un poco antes del siguiente intento
-                await asyncio.sleep(2)
-
-        # Si llegamos aquí, significa que tuvimos éxito con algún cliente
-        print(f"[YT-DLP] Successfully extracted: {metadata['title']} ({metadata['duration']}s)")
+        print(f"[HYBRID-API] Successfully extracted: {metadata['title']} ({metadata['duration']}s)")
         return metadata
 
     except Exception as e:
         error_str = str(e)
-        print(f"[YT-DLP] Error extracting metadata for {video_id}: {error_str}")
+        print(f"[HYBRID-API] Error extracting metadata for {video_id}: {error_str}")
 
-        # Manejo específico de errores según documentación yt-dlp
-        if "429" in error_str or "Too Many Requests" in error_str:
-            print(f"[YT-DLP] Rate limit detected for {video_id}. Service is blocking due to overuse.")
-            # Agregar delay adicional para próximos requests
-            global _ytdlp_request_times
-            _ytdlp_request_times.extend([time.time()] * 10)  # Penalty: contar como 10 requests
-
-        elif "402" in error_str or "Payment Required" in error_str:
-            print(f"[YT-DLP] Payment required error for {video_id}. IP may be blocked.")
-
-        elif "Sign in to confirm you're not a bot" in error_str:
-            print(f"[YT-DLP] Bot detection triggered for {video_id}. Advanced anti-bot failed.")
-
-        elif "This content isn't available" in error_str:
-            print(f"[YT-DLP] Content unavailable for {video_id}. May be rate limited or geo-blocked.")
-
-        # Intentar obtener metadata básica de la base de datos si ya existe
-        try:
-            async with _db_lock:
-                db = db_read()
-                existing_track = db.get(video_id)
-                if existing_track and not existing_track.get('title', '').startswith('YouTube Video'):
-                    print(f"[YT-DLP] Using existing metadata from database for {video_id}")
-                    return {
-                        "id": video_id,
-                        "title": existing_track.get('title', f'YouTube Video {video_id}'),
-                        "duration": existing_track.get('seconds', 180),
-                        "seconds": existing_track.get('seconds', 180),
-                        "source": "database_fallback"
-                    }
-        except Exception as db_error:
-            print(f"[YT-DLP] Database fallback failed: {db_error}")
-
-        # Fallback usando YouTube Search para obtener título básico
-        try:
-            print(f"[YT-DLP-FALLBACK] Trying YouTube Search fallback for {video_id}")
-            # Buscar el video por ID en YouTube Search
-            search_results = await search_youtube_async(video_id, max_results=5)
-
-            # Buscar el video específico en los resultados
-            for result in search_results:
-                if result.get('id', {}).get('videoId') == video_id:
-                    title = result.get('snippet', {}).get('title', '')
-                    if title and not title.startswith('YouTube Video'):
-                        print(f"[YT-DLP-FALLBACK] Found title via search: {title}")
-                        return {
-                            "id": video_id,
-                            "title": title,
-                            "duration": 180,  # Duración estimada
-                            "seconds": 180,
-                            "uploader": result.get('snippet', {}).get('channelTitle', 'Unknown'),
-                            "description": result.get('snippet', {}).get('description', '')[:200] + '...' if result.get('snippet', {}).get('description') else '',
-                            "thumbnail": result.get('snippet', {}).get('thumbnails', {}).get('medium', {}).get('url', f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg'),
-                            "source": "youtube_search_fallback"
-                        }
-
-            # Si no se encuentra por ID, intentar búsqueda por título similar
-            if search_results:
-                first_result = search_results[0]
-                title = first_result.get('snippet', {}).get('title', '')
-                if title:
-                    print(f"[YT-DLP-FALLBACK] Using similar video title: {title}")
-                    return {
-                        "id": video_id,
-                        "title": title,
-                        "duration": 180,
-                        "seconds": 180,
-                        "uploader": first_result.get('snippet', {}).get('channelTitle', 'Unknown'),
-                        "description": first_result.get('snippet', {}).get('description', '')[:200] + '...' if first_result.get('snippet', {}).get('description') else '',
-                        "thumbnail": f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg',
-                        "source": "youtube_search_similar"
-                    }
-
-        except Exception as search_error:
-            print(f"[YT-DLP-FALLBACK] YouTube Search fallback failed: {search_error}")
-
-        # Último fallback con placeholder y código de error específico
-        error_code = "unknown"
-        if "429" in error_str or "Too Many Requests" in error_str:
-            error_code = "rate_limit"
-        elif "402" in error_str or "Payment Required" in error_str:
-            error_code = "payment_required"
-        elif "Sign in to confirm you're not a bot" in error_str:
-            error_code = "bot_detected"
-        elif "This content isn't available" in error_str:
-            error_code = "content_unavailable"
-
+        # Fallback básico
         return {
             "id": video_id,
             "title": f"YouTube Video {video_id}",
             "duration": 180,
             "seconds": 180,
+            "uploader": "Unknown",
+            "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
             "error": error_str,
-            "error_code": error_code,
-            "source": "placeholder_fallback"
+            "source": "hybrid_fallback"
         }
 
 @app.get("/api/queue")
@@ -1309,7 +1335,7 @@ async def stream(request: Request, track_id: str):
             try:
                 print(f"Refrescando URL expirada para {track_id}")
                 await adaptive_delay()  # Aplicar delay antes de refrescar
-                track = await asyncio.to_thread(_get_yt_stream_info, track_id)
+                track = await asyncio.to_thread(_get_yt_stream_info_pytubefix, track_id)
                 stream_url = track.get("stream_url")
             except Exception as e:
                 print(f"Error refrescando stream: {e}")
@@ -1574,6 +1600,12 @@ async def api_get_room(room_id: str):
         "state": room.public_state()
     }
 
+@app.get("/api/rooms/{room_id}/queue")
+async def api_get_room_queue(room_id: str):
+    """Obtiene solo la cola de una room específica"""
+    room = await get_or_create_room(room_id)
+    return await room.get_queue_detailed()
+
 @app.delete("/api/rooms/{room_id}")
 async def api_delete_room(room_id: str, user_id: str = Body(...)):
     """Elimina una room (solo el creador puede eliminarla)"""
@@ -1678,6 +1710,7 @@ async def ws_room_endpoint(ws: WebSocket, room_id: str):
         while True:
             msg = await ws.receive_json()
             t = msg.get("type")
+            # print(f"[DEBUG] WebSocket received: type={t}, msg={msg}")  # Comentado para reducir spam
 
             if t == "queue:add":
                 url_or_id = msg.get("urlOrId") or msg.get("id")
@@ -1687,26 +1720,32 @@ async def ws_room_endpoint(ws: WebSocket, room_id: str):
                     continue
                 try:
                     if hybrid_mode:
-                        # Modo híbrido: agregar directamente sin extraer metadata (evita bot detection)
-                        print(f"[HYBRID] Agregando track {url_or_id} en modo híbrido (sin metadata por bot detection)")
-
-                        # Usar solo placeholder para evitar "Sign in to confirm you're not a bot"
-                        title = f"YouTube Video {url_or_id}"
-                        duration = 180  # 3 minutos default
-
-                        # Crear record híbrido
-                        rec = {
-                            "id": url_or_id,
-                            "title": title,
-                            "seconds": duration,
-                            "mode": "hybrid",
-                            "timestamp": time.time(),
-                            "thumbnail": f"https://i.ytimg.com/vi/{url_or_id}/hqdefault.jpg"
-                        }
-                        # Guardar en base de datos
+                        # Verificar si el track ya existe para evitar duplicados
                         db = db_read()
-                        db[url_or_id] = rec
-                        db_write(db)
+                        if url_or_id in db:
+                            print(f"[HYBRID] Track {url_or_id} ya existe, actualizando metadata si es necesario")
+                            rec = db[url_or_id]
+                        else:
+                            # Modo híbrido: agregar directamente sin extraer metadata (evita bot detection)
+                            print(f"[HYBRID] Agregando track {url_or_id} en modo híbrido (sin metadata por bot detection)")
+
+                            # Usar solo placeholder para evitar "Sign in to confirm you're not a bot"
+                            title = f"YouTube Video {url_or_id}"
+                            duration = 180  # 3 minutos default
+
+                            # Crear record híbrido
+                            rec = {
+                                "id": url_or_id,
+                                "title": title,
+                                "seconds": duration,
+                                "duration": duration,  # Sincronizar ambos campos
+                                "mode": "hybrid",
+                                "timestamp": time.time(),
+                                "thumbnail": f"https://i.ytimg.com/vi/{url_or_id}/hqdefault.jpg"
+                            }
+                            # Guardar en base de datos
+                            db[url_or_id] = rec
+                            db_write(db)
                         await ws.send_json({"type":"ok","data":{"action":"queue:add","id":rec["id"]}})
                     else:
                         # Modo tradicional: procesar con yt-dlp
@@ -1730,7 +1769,9 @@ async def ws_room_endpoint(ws: WebSocket, room_id: str):
                     await ws.send_json({"type":"error","data":{"message":error_msg}})
 
             elif t == "player:play":
+                # print(f"[DEBUG] Received player:play command: {msg}")  # Comentado
                 await room_cmd_play(room, msg.get("at"))
+                # print(f"[DEBUG] Completed player:play command")  # Comentado
             elif t == "player:pause":
                 await room_cmd_pause(room)
             elif t == "player:seek":

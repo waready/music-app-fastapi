@@ -5,9 +5,7 @@
     "created_by": null,
     "is_public": true,
     "password_hash": null,
-    "queue": [
-      "FB1DRhDuyqs"
-    ]
+    "queue": []
   },
   "ba28660f": {
     "id": "ba28660f",
@@ -15,6 +13,14 @@
     "created_by": "user_4zalcxt0f",
     "is_public": false,
     "password_hash": "$2b$12$EuyDO/az5iUqqT4iSoPJau96mScaTJj9wsYSiXEdFsCufXguXYv2K",
+    "queue": []
+  },
+  "Default Room": {
+    "id": "Default Room",
+    "name": "Room Default Room",
+    "created_by": null,
+    "is_public": true,
+    "password_hash": null,
     "queue": []
   }
 }

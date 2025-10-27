@@ -2416,6 +2416,7 @@ new Vue({
     userInteracted: false,
     needsAudioActivation: false, // Flag para indicar que se necesita activación de audio después de F5
     autoMutedAfterF5: false, // Flag para indicar que se auto-muteó después de F5
+    wasPlayingBeforeBackground: false, // Flag para auto-resume en mobile
 
     // Search properties
     searchQuery: '',
@@ -5640,6 +5641,9 @@ new Vue({
     handleAppBackground() {
       // App in background, maintaining connection
 
+      // Remember if we were playing when going to background
+      this.wasPlayingBeforeBackground = this.state.playing;
+
       // Ensure WebSocket stays connected
       if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
         console.log('[BACKGROUND] Reconnecting WebSocket for background playback');
@@ -5670,10 +5674,34 @@ new Vue({
       // Sync state with server
       this.wsSend('state:get', {});
 
-      // Refresh current position
+      // Auto-resume playback if it was playing before background
       setTimeout(() => {
         this.syncAudio();
-      }, 500);
+
+        // Auto-resume if we were playing before going to background
+        if (this.wasPlayingBeforeBackground && this.state.playing && this.isMobile) {
+          console.log('[FOREGROUND] Auto-resuming playback on mobile');
+
+          if (this.isUsingYouTubePlayer && this.youtubePlayer) {
+            try {
+              this.youtubePlayer.playVideo();
+              console.log('[FOREGROUND] YouTube Player auto-resumed');
+            } catch (e) {
+              console.warn('[FOREGROUND] Error auto-resuming YouTube Player:', e);
+            }
+          } else if (this.audio && !this.audio.paused === false) {
+            try {
+              this.audio.play();
+              console.log('[FOREGROUND] Audio element auto-resumed');
+            } catch (e) {
+              console.warn('[FOREGROUND] Error auto-resuming audio element:', e);
+            }
+          }
+        }
+
+        // Reset the flag
+        this.wasPlayingBeforeBackground = false;
+      }, 800); // Increased delay to ensure sync is complete
     },
 
     // Initialize Wake Lock API (experimental) to prevent device sleep

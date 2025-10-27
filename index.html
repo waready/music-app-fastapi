@@ -3,6 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Meta tags for better mobile audio playback -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#121212">
+
   <title>Music Player - Spotify Style</title>
   <link href="https://fonts.googleapis.com/css2?family=Circular+Std:wght@400;500;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
@@ -677,15 +684,39 @@
       color: var(--spotify-text);
       font-size: 1.5rem;
       cursor: pointer;
-      padding: 0.5rem;
-      border-radius: 0.25rem;
+      padding: 1rem; /* Increased padding for better touch target */
+      border-radius: 0.375rem;
       display: flex;
       align-items: center;
       justify-content: center;
+      min-width: 48px; /* Increased minimum touch target size */
+      min-height: 48px;
+      position: relative;
+      /* Ensure the clickable area extends properly */
+      margin: -0.25rem; /* Negative margin to expand clickable area */
+      z-index: 10000; /* Ensure it's above notifications and other elements */
+    }
+
+    /* Expand clickable area with pseudo-element */
+    .hamburger-btn::before {
+      content: '';
+      position: absolute;
+      top: -0.5rem;
+      left: -0.5rem;
+      right: -0.5rem;
+      bottom: -0.5rem;
+      /* Debug: uncomment to visualize the click area */
+      /* background: rgba(255, 0, 0, 0.1); */
     }
 
     .hamburger-btn:hover {
       background: var(--spotify-hover);
+    }
+
+    /* Debug: Temporary visual indicator for click area (remove after testing) */
+    .hamburger-btn:active {
+      background: rgba(29, 185, 84, 0.2);
+      transform: scale(0.95);
     }
 
     /* Mobile sidebar overlay */
@@ -731,6 +762,33 @@
       .sidebar-overlay,
       .sidebar-mobile {
         display: none !important;
+      }
+
+      /* Show text in desktop */
+      .desktop-only {
+        display: inline !important;
+        margin-left: 0.5rem;
+      }
+
+      /* Hide mobile-only elements in desktop */
+      .mobile-only {
+        display: none !important;
+      }
+
+      /* Desktop button styles with text and icons */
+      .results-section .song-item .play-btn,
+      .results-section .song-item .queue-btn {
+        padding: 0.5rem 1rem !important;
+        border-radius: 0.375rem !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        min-width: auto !important;
+        min-height: auto !important;
+        max-width: none !important;
+        aspect-ratio: unset !important;
+        flex: none !important;
+        gap: 0.5rem;
       }
     }
 
@@ -813,7 +871,7 @@
 
       .spotify-notification {
         right: 1rem;
-        top: 1rem;
+        top: 4.5rem; /* Move below mobile header (3.5rem height + 1rem spacing) */
         max-width: calc(100vw - 2rem);
       }
 
@@ -828,22 +886,62 @@
       .song-info {
         flex: 1;
         min-width: 0;
-        overflow: hidden;
-        margin-right: 0.5rem;
       }
 
       .song-title {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        max-width: 100%;
+        line-height: 1.3;
+        position: relative;
+      }
+
+      /* Expandable titles for mobile search results */
+      .results-section .song-item .song-title {
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.25rem !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        position: relative !important;
+        max-width: 100% !important;
+      }
+
+      .results-section .song-item .song-title .title-text {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .results-section .song-item .song-title.expanded .title-text {
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: unset !important;
+        word-wrap: break-word;
+        line-height: 1.3;
+      }
+
+      .results-section .song-item .song-title .expand-arrow {
+        cursor: pointer;
+        color: var(--spotify-green);
+        font-size: 0.75rem;
+        user-select: none;
+        flex-shrink: 0;
+        padding: 0.125rem;
+        transition: transform 0.2s ease;
+      }
+
+      .results-section .song-item .song-title .expand-arrow:hover {
+        color: var(--spotify-text);
       }
 
       .song-artist {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        white-space: normal;
+        word-wrap: break-word;
+        line-height: 1.2;
         max-width: 100%;
+        margin-top: 0.25rem;
       }
 
       .song-actions {
@@ -910,6 +1008,78 @@
         min-width: 2.5rem !important;
         max-width: 4rem !important;
         margin: 0 0.25rem !important;
+      }
+
+      /* Mobile Player Improvements */
+      .player {
+        height: auto !important;
+        min-height: 5rem;
+        flex-direction: column !important;
+        gap: 0.75rem !important;
+        padding: 1rem !important;
+      }
+
+      .player-info {
+        width: 100% !important;
+        flex-direction: column !important;
+        gap: 0.75rem !important;
+        align-items: stretch !important;
+      }
+
+      .player-info > div:first-child {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
+
+      .current-track-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .current-track-title {
+        font-size: 0.875rem !important;
+        font-weight: 500 !important;
+        line-height: 1.2 !important;
+        margin-bottom: 0.25rem !important;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .current-track-time {
+        font-size: 0.75rem !important;
+        margin-bottom: 0.5rem !important;
+      }
+
+      .player-controls {
+        justify-content: center !important;
+        gap: 2rem !important;
+        order: 2;
+      }
+
+      .player-controls .control-btn {
+        padding: 0.75rem !important;
+      }
+
+      .player-controls .play-pause-btn {
+        padding: 1rem !important;
+        background-color: var(--spotify-green) !important;
+        color: var(--spotify-black) !important;
+      }
+
+      .player-volume {
+        order: 3;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        gap: 1rem !important;
+        width: 100% !important;
+      }
+
+      .volume-slider {
+        flex: 1 !important;
+        max-width: 200px !important;
       }
 
       /* Compact layout for mobile */
@@ -999,17 +1169,245 @@
 
       /* Ultra-mobile optimizations for very small screens */
       .song-item {
-        padding: 0.375rem !important;
-        gap: 0.375rem !important;
+        padding: 0.5rem !important;
+        gap: 0.75rem !important;
+        display: flex !important;
+        align-items: center !important;
+        background-color: var(--spotify-light-gray);
+        border-radius: 0.5rem;
+        margin-bottom: 0.75rem;
+      }
+
+      /* Mobile layout: imagen + info lado a lado */
+      .song-item .song-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      /* Hide text in mobile, show only icons */
+      .desktop-only {
+        display: none !important;
+      }
+
+      /* Show mobile-only elements */
+      .mobile-only {
+        display: flex !important;
+        gap: 0.5rem !important;
+        align-items: center !important;
+        margin-top: 0.25rem !important;
+      }
+
+      /* MOBILE SEARCH RESULTS: More specific selector to override content-body rules */
+      .results-section .song-item .mobile-only .control-btn {
+        padding: 0 !important;
+        width: 1.75rem !important;
+        height: 1.75rem !important;
+        min-width: 1.75rem !important;
+        min-height: 1.75rem !important;
+        max-width: 1.75rem !important;
+        border-radius: 0.25rem !important; /* Bordes menos redondos */
+        flex: none !important;
+        flex-shrink: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-sizing: border-box !important;
+        border: none !important;
+        background-color: transparent !important;
+        color: var(--spotify-text-subdued) !important;
+        transition: all 0.2s ease !important;
+      }
+
+      /* Iconos más pequeños para móvil */
+      .results-section .song-item .mobile-only .control-btn .icon {
+        width: 0.875rem !important;
+        height: 0.875rem !important;
+      }
+
+      /* Estilos específicos para cada tipo de botón móvil */
+      .results-section .song-item .mobile-only .play-btn {
+        background-color: var(--spotify-green) !important;
+        color: white !important;
+      }
+
+      .results-section .song-item .mobile-only .queue-btn {
+        background-color: transparent !important;
+        border: 1px solid var(--spotify-text-subdued) !important;
+        color: var(--spotify-text-subdued) !important;
+      }
+
+      .results-section .song-item .mobile-only .like-btn {
+        background-color: transparent !important;
+        color: var(--spotify-text-subdued) !important;
+      }
+
+      .results-section .song-item .mobile-only .playlist-btn {
+        background-color: transparent !important;
+        color: var(--spotify-text-subdued) !important;
+      }
+
+      /* Hover effects para móvil */
+      .results-section .song-item .mobile-only .control-btn:hover {
+        transform: scale(1.1) !important;
+        opacity: 0.8 !important;
+      }
+
+
+      .song-thumbnail {
+        width: 3rem !important;
+        height: 3rem !important;
+        flex-shrink: 0;
+      }
+
+      /* Mobile player redesign */
+      .player {
+        flex-direction: column !important;
+        gap: 1rem !important;
+        padding: 1rem !important;
+      }
+
+      .player-info {
         flex-direction: row !important;
+        align-items: center !important;
+        gap: 1rem !important;
+      }
+
+      .current-track-thumbnail {
+        width: 4rem !important;
+        height: 4rem !important;
+        flex-shrink: 0 !important;
+      }
+
+      .current-track-info {
+        flex: 1 !important;
+        min-width: 0 !important;
+        text-align: left !important;
+      }
+
+      .current-track-title {
+        font-size: 0.9rem !important;
+        font-weight: 600 !important;
+        margin-bottom: 0.25rem !important;
+        white-space: nowrap;
+        overflow: hidden;
+        position: relative;
+        text-overflow: ellipsis;
+      }
+
+      .current-track-title.scrolling {
+        text-overflow: clip !important; /* Quitar ... cuando está scrolleando */
+        overflow: visible !important; /* Permitir que el texto sea visible durante la animación */
+        position: relative;
+        /* La animación se define dinámicamente en JavaScript */
+      }
+
+      /* Contenedor para scroll sin gradiente interferente */
+      .current-track-info {
+        position: relative;
+        overflow: hidden;
+      }
+
+      /* Durante el scroll, permitir que el contenedor muestre el texto completo pero contenido */
+      .current-track-info.scrolling-active {
+        overflow: hidden; /* Mantener hidden para evitar superposición */
+        position: relative;
+      }
+
+      /* Asegurar que el texto scroll no se extienda fuera del contenedor */
+      .current-track-title.scrolling {
+        text-overflow: clip !important;
+        overflow: hidden !important; /* Cambiar a hidden para mantener límites */
+        position: relative;
+        /* La animación se define dinámicamente en JavaScript */
+      }
+
+      .current-track-artist {
+        font-size: 0.8rem !important;
+        color: var(--spotify-text-subdued) !important;
+        margin-bottom: 0.25rem !important;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .current-track-time {
+        font-size: 0.75rem !important;
+        color: var(--spotify-text-subdued) !important;
+      }
+
+      /* Hide heart icon in mobile player */
+      .player-info > div:last-child {
+        display: none !important;
+      }
+
+      .player-controls {
+        justify-content: center !important;
+        gap: 1.5rem !important;
         align-items: center !important;
       }
 
-      .song-thumbnail {
+      .player-controls .control-btn,
+      .player-volume .control-btn {
+        width: 3rem !important;
+        height: 3rem !important;
+        border-radius: 50% !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+      }
+
+      .player-volume {
+        position: relative !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.5rem !important;
+        flex: 1 !important;
+        max-width: 8rem !important;
+      }
+
+      .player-volume .control-btn {
+        flex-shrink: 0 !important;
         width: 2.5rem !important;
         height: 2.5rem !important;
-        flex-shrink: 0;
       }
+
+      .volume-slider {
+        display: block !important;
+        flex: 1 !important;
+        height: 0.25rem !important;
+        background: var(--spotify-hover) !important;
+        outline: none !important;
+        border: none !important;
+        cursor: pointer !important;
+        border-radius: 0.125rem !important;
+      }
+
+      .volume-slider::-webkit-slider-thumb {
+        appearance: none !important;
+        width: 0.75rem !important;
+        height: 0.75rem !important;
+        border-radius: 50% !important;
+        background: var(--spotify-green) !important;
+        cursor: pointer !important;
+      }
+
+      .volume-slider::-moz-range-thumb {
+        width: 0.75rem !important;
+        height: 0.75rem !important;
+        border-radius: 50% !important;
+        background: var(--spotify-green) !important;
+        cursor: pointer !important;
+        border: none !important;
+      }
+
+      .player-volume span {
+        display: block !important;
+        color: var(--spotify-text-subdued) !important;
+        font-size: 0.7rem !important;
+        min-width: 2.5rem !important;
+        text-align: right !important;
+      }
+
 
       .song-info {
         flex: 1;
@@ -1075,8 +1473,8 @@
     <div class="mobile-header">
       <div class="mobile-title">🎵 Music Player</div>
       <button class="hamburger-btn" @click="toggleMobileMenu">
-        <svg viewBox="0 0 24 24" style="width: 1.5rem; height: 1.5rem;" fill="currentColor">
-          <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+        <svg viewBox="0 0 24 24" style="width: 1.25rem; height: 1.25rem; pointer-events: none;" fill="currentColor">
+          <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" style="pointer-events: none;"/>
         </svg>
       </button>
     </div>
@@ -1283,18 +1681,7 @@
                     <div v-if="isTrackProcessing(track)" class="status-spinner"></div>
                     <span>{{ getTrackStatusText(track) }}</span>
                   </div>
-                  <div class="song-actions">
-                    <button @click="toggleLike(track.id, track.title)"
-                            class="control-btn"
-                            style="color: var(--spotify-text-subdued);">
-                      <svg v-if="isLiked(track.id)" class="icon" style="color: var(--spotify-green);" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                      </svg>
-                      <svg v-else class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                      </svg>
-                    </button>
-                  </div>
+                  <!-- Heart icon removed to save space in queue -->
                 </div>
               </div>
             </div>
@@ -1359,16 +1746,75 @@
               </div>
 
               <div class="song-grid">
-                <div v-for="song in paginatedSearchResults" :key="song.id.videoId" class="song-item">
+                <div v-for="song in paginatedSearchResults" :key="song.id.videoId" class="song-item" :data-song-id="song.id.videoId">
                   <img :src="song.snippet.thumbnails.medium.url" :alt="song.snippet.title" class="song-thumbnail">
                   <div class="song-info">
-                    <div class="song-title">{{ song.snippet.title }}</div>
-                    <div class="song-artist">{{ song.snippet.channelTitle }}</div>
+                    <div class="song-title" :title="song.snippet.title" :class="{ 'expanded': song.titleExpanded }">
+                      <span class="title-text">{{ song.snippet.title }}</span>
+                      <span v-if="song.titleTruncated"
+                            @click="toggleTitleExpansion(song)"
+                            class="expand-arrow"
+                            :class="{ 'up': song.titleExpanded }">
+                        {{ song.titleExpanded ? '▲' : '▼' }}
+                      </span>
+                    </div>
+                    <div class="song-artist desktop-only">{{ song.snippet.channelTitle }}</div>
+                    <!-- Iconos debajo del título en móvil -->
+                    <div class="song-actions mobile-only">
+                      <button @click="toggleLike(song.id.videoId, song.snippet.title)"
+                              class="control-btn like-btn">
+                        <svg v-if="isLiked(song.id.videoId)" class="icon" style="color: var(--spotify-green);" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                        </svg>
+                        <svg v-else class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                        </svg>
+                      </button>
+
+                      <!-- Playlist dropdown -->
+                      <div style="position: relative; display: inline-block;">
+                        <button @click.stop="togglePlaylistDropdown(song)" class="control-btn playlist-btn">
+                          <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"/>
+                          </svg>
+                        </button>
+
+                        <div v-show="song._showPlaylists" style="position: absolute; top: 100%; left: 0; background: var(--spotify-light-gray); border-radius: 0.375rem; padding: 0.5rem; min-width: 150px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                          <div v-if="!playlists.length" style="color: var(--spotify-text-subdued); font-size: 0.75rem; text-align: center; padding: 0.5rem;">
+                            <p>No hay playlists</p>
+                            <button @click.stop="showCreatePlaylist = true; song._showPlaylists = false" style="color: var(--spotify-green); background: none; border: none; cursor: pointer; margin-top: 0.25rem; font-size: 0.75rem;">
+                              Crear playlist
+                            </button>
+                          </div>
+                          <div v-else>
+                            <div v-for="playlist in playlists" :key="playlist.id"
+                                 @click.stop="addToPlaylist(playlist.id, song.id.videoId, song.snippet.title); song._showPlaylists = false"
+                                 style="padding: 0.5rem; cursor: pointer; border-radius: 0.25rem; transition: background-color 0.2s; font-size: 0.75rem; color: var(--spotify-text);"
+                                 @mouseover="$event.target.style.backgroundColor = 'var(--spotify-hover)'"
+                                 @mouseout="$event.target.style.backgroundColor = 'transparent'">
+                              {{ playlist.name }}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button class="play-btn control-btn" @click="playNow(song.id.videoId)">
+                        <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M8 5v14l11-7z"/>
+                        </svg>
+                      </button>
+                      <button class="queue-btn control-btn" @click="addToQueue(song.id.videoId, song)">
+                        <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                        </svg>
+                      </button>
+                    </div>
                   </div>
-                  <div class="song-actions">
+
+                  <!-- Controles para desktop -->
+                  <div class="song-actions desktop-only">
                     <button @click="toggleLike(song.id.videoId, song.snippet.title)"
-                            class="control-btn"
-                            style="color: var(--spotify-text-subdued); margin-right: 0.5rem;">
+                            class="control-btn">
                       <svg v-if="isLiked(song.id.videoId)" class="icon" style="color: var(--spotify-green);" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
                       </svg>
@@ -1379,7 +1825,7 @@
 
                     <!-- Playlist dropdown -->
                     <div style="position: relative; display: inline-block;">
-                      <button @click.stop="togglePlaylistDropdown(song)" class="control-btn" style="margin-right: 0.5rem;">
+                      <button @click.stop="togglePlaylistDropdown(song)" class="control-btn">
                         <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"/>
                         </svg>
@@ -1404,11 +1850,17 @@
                       </div>
                     </div>
 
-                    <button class="play-btn" @click="playNow(song.id.videoId)">
-                      ▶ Reproducir
+                    <button class="play-btn control-btn" @click="playNow(song.id.videoId)">
+                      <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8 5v14l11-7z"/>
+                      </svg>
+                      <span class="btn-text">Play</span>
                     </button>
-                    <button class="queue-btn" @click="addToQueue(song.id.videoId, song)">
-                      + Cola
+                    <button class="queue-btn control-btn" @click="addToQueue(song.id.videoId, song)">
+                      <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                      </svg>
+                      <span class="btn-text">Cola</span>
                     </button>
                   </div>
                 </div>
@@ -1670,16 +2122,21 @@
         <img v-if="state.current" :src="thumb(state.current.id)" :alt="state.current.title" class="current-track-thumbnail">
         <div v-else style="width: 3.5rem; height: 3.5rem; background-color: var(--spotify-hover); border-radius: 0.375rem;"></div>
 
-        <div class="current-track-info">
-          <div class="current-track-title">
+        <div class="current-track-info"
+             :class="{ 'scrolling-active': isMobile && shouldScrollTitle }">
+          <div class="current-track-title"
+               ref="trackTitle"
+               :class="{ scrolling: isMobile && shouldScrollTitle }">
             {{ state.current ? state.current.title : '—' }}
-            <span v-if="state.current" style="font-size: 0.7rem; margin-left: 0.5rem; opacity: 0.7;">
+            <span v-if="state.current && !isMobile" style="font-size: 0.7rem; margin-left: 0.5rem; opacity: 0.7;">
               {{
-                isMobile ? '📱' :
                 isUsingYouTubePlayer ? '📺' :
                 (hasAdBlocker ? '🚫📺' : '🎵')
               }}
             </span>
+          </div>
+          <div v-if="isMobile && state.current && state.current.uploader" class="current-track-artist">
+            {{ state.current.uploader }}
           </div>
           <div class="current-track-time">{{ state.positionLabel }} / {{ state.durationLabel }}</div>
           <!-- Barra de progreso interactiva -->
@@ -1711,55 +2168,55 @@
       </div>
 
       <div class="player-controls">
-        <button class="control-btn" @click="wsSend('player:play', {})">
+        <button class="control-btn" @click="forcePlaybackIfPending(); wsSend('player:play', {})">
           <svg class="icon" viewBox="0 0 24 24">
             <path d="M8 5v14l11-7z"/>
           </svg>
         </button>
 
-        <button class="control-btn play-pause-btn" @click="wsSend('player:pause', {})">
+        <button class="control-btn play-pause-btn" @click="forcePlaybackIfPending(); wsSend('player:pause', {})">
           <svg class="icon" viewBox="0 0 24 24">
             <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
           </svg>
         </button>
 
-        <button class="control-btn" @click="wsSend('player:next', {})">
+        <button class="control-btn" @click="forcePlaybackIfPending(); wsSend('player:next', {})">
           <svg class="icon" viewBox="0 0 24 24">
             <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
           </svg>
         </button>
+
+        <!-- Volume control inline -->
+        <div class="player-volume">
+          <button @click="forcePlaybackIfPending(); toggleMute()" class="control-btn" data-mute-button>
+            <svg v-if="muted || volume === 0" class="icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+            </svg>
+            <svg v-else-if="volume < 0.3" class="icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M7 9v6h4l5 5V4l-5 5H7z"/>
+            </svg>
+            <svg v-else-if="volume < 0.7" class="icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/>
+            </svg>
+            <svg v-else class="icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+            </svg>
+          </button>
+
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            :value="volume"
+            @input="forcePlaybackIfPending(); setVolume($event.target.value)"
+            class="volume-slider"
+          >
+
+          <span>{{ Math.round(volume * 100) }}%</span>
+        </div>
       </div>
 
-      <div class="player-volume">
-        <button @click="toggleMute" class="control-btn">
-          <svg v-if="muted || volume === 0" class="icon" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
-          </svg>
-          <svg v-else-if="volume < 0.3" class="icon" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M7 9v6h4l5 5V4l-5 5H7z"/>
-          </svg>
-          <svg v-else-if="volume < 0.7" class="icon" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/>
-          </svg>
-          <svg v-else class="icon" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-          </svg>
-        </button>
-
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          :value="volume"
-          @input="setVolume($event.target.value)"
-          class="volume-slider"
-        >
-
-        <span style="color: var(--spotify-text-subdued); font-size: 0.75rem; min-width: 30px; text-align: center;">
-          {{ Math.round(volume * 100) }}%
-        </span>
-      </div>
     </div>
 
     <!-- Hidden Audio Element -->
@@ -1882,9 +2339,11 @@
       @timeupdate="onAudioTimeUpdate"
       @ended="onAudioEnded"
       @loadedmetadata="onAudioLoaded"
-      @error="onAudioError"
+      preload="auto"
+      playsinline
+      webkit-playsinline
       :controls="isMobile"
-      preload="none"
+      @error="onAudioError"
       :style="{
         display: isMobile && currentAudioUrl ? 'block' : 'none',
         width: isMobile ? '100%' : 'auto',
@@ -1947,6 +2406,7 @@ new Vue({
     // Hybrid Player System
     playerMode: 'hybrid', // 'youtube', 'audio', 'hybrid'
     youtubePlayer: null,
+    wakeLock: null, // Para Wake Lock API
     youtubePlayerReady: false,
     currentAudioUrl: null,
     isUsingYouTubePlayer: false,
@@ -1954,6 +2414,8 @@ new Vue({
     youtubePositionInterval: null,
     isMobile: false,
     userInteracted: false,
+    needsAudioActivation: false, // Flag para indicar que se necesita activación de audio después de F5
+    autoMutedAfterF5: false, // Flag para indicar que se auto-muteó después de F5
 
     // Search properties
     searchQuery: '',
@@ -1998,19 +2460,31 @@ new Vue({
 
   computed: {
     audioSrc() {
-      // Si estamos usando YouTube Player O si el track está en modo híbrido, no usar audio element del servidor
+      // PRIORIDAD 1: Si estamos usando YouTube Player, no usar audio element
       if (this.isUsingYouTubePlayer) {
         console.log('[AUDIO] audioSrc empty - using YouTube Player');
         return '';
       }
-      // También verificar si el track actual está en modo híbrido (para arquitectura serverless)
+
+      // PRIORIDAD 2: Si el track está en modo híbrido, nunca usar stream del servidor
+      // Esto evita los errores 503 mientras YouTube Player se carga
       if (this.state.current && (this.state.current.mode === 'hybrid' || this.state.current.mode === 'lightweight')) {
-        console.log(`[AUDIO] audioSrc empty - track mode: ${this.state.current.mode}`);
+        console.log(`[AUDIO] audioSrc empty - track mode: ${this.state.current.mode} (waiting for YouTube Player)`);
         return '';
       }
+
+      // PRIORIDAD 3: Modo tradicional - usar stream del servidor
       const src = this.state.current ? `/stream/${this.state.current.id}` : '';
       console.log(`[AUDIO] audioSrc: ${src}`);
       return src;
+    },
+
+    shouldScrollTitle() {
+      if (!this.state.current || !this.state.current.title) return false;
+
+      // Check if title is longer than approximately 25 characters for mobile
+      const title = this.state.current.title;
+      return title.length > 25;
     },
 
     paginatedSearchResults() {
@@ -2033,6 +2507,125 @@ new Vue({
   },
 
   methods: {
+    // Helper para actualizar duración solo si es mejor que la actual
+    updateDurationIfBetter(newDuration, source = 'unknown') {
+      if (!newDuration || newDuration <= 0) return false;
+
+      const currentDuration = this.state.duration;
+
+      // Si la nueva duración es placeholder (180s) y ya tenemos una duración real, no actualizar
+      if (newDuration === 180 && currentDuration > 180) {
+        console.log(`[DURATION] Ignoring placeholder duration from ${source}: ${newDuration}s (keeping real: ${currentDuration}s)`);
+        return false;
+      }
+
+      // Si la nueva duración es significativamente diferente y mejor que placeholder, actualizar
+      if (currentDuration === 180 || currentDuration === 0 || Math.abs(currentDuration - newDuration) > 2) {
+        this.state.duration = newDuration;
+        this.state.durationLabel = this.mmss(newDuration);
+        console.log(`[DURATION] Updated from ${source}: ${newDuration}s (was: ${currentDuration}s)`);
+
+        // Enviar duración real al servidor para evitar auto-advance prematuro
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.wsSend('player:update_duration', { duration: newDuration });
+          console.log(`[DURATION] Sent real duration to server: ${newDuration}s`);
+        }
+
+        return true;
+      }
+
+      return false;
+    },
+
+    // Title scrolling setup
+    setupTitleScrolling() {
+      // Evitar ejecuciones múltiples para el mismo título
+      const currentTitle = this.state.current?.title || '';
+      if (this._lastProcessedTitle === currentTitle && this._scrollSetupComplete) {
+        // Skipping duplicate processing - removed console.log
+        return;
+      }
+
+      // Debouncing para evitar múltiples ejecuciones
+      if (this._scrollSetupTimeout) {
+        clearTimeout(this._scrollSetupTimeout);
+      }
+
+      this._scrollSetupTimeout = setTimeout(() => {
+        const titleElement = this.$refs.trackTitle;
+        if (!titleElement || !this.isMobile) {
+          return;
+        }
+
+        // Asegurar que el elemento esté completamente renderizado
+        const containerElement = titleElement.parentElement;
+        const containerWidth = containerElement.offsetWidth;
+
+        // Crear elemento temporal para medir el ancho real del texto sin restricciones
+        const measureElement = document.createElement('span');
+        measureElement.style.cssText = `
+          position: absolute;
+          top: -9999px;
+          left: -9999px;
+          font-family: ${getComputedStyle(titleElement).fontFamily};
+          font-size: ${getComputedStyle(titleElement).fontSize};
+          font-weight: ${getComputedStyle(titleElement).fontWeight};
+          white-space: nowrap;
+          visibility: hidden;
+          pointer-events: none;
+        `;
+        measureElement.textContent = titleElement.textContent;
+        document.body.appendChild(measureElement);
+
+        const actualTextWidth = measureElement.offsetWidth;
+        document.body.removeChild(measureElement);
+
+        // Measurement completed - removed console.log
+
+        // Solo hacer scroll si el texto es más ancho que el contenedor
+        if (actualTextWidth > containerWidth) {
+          // Calcular el desplazamiento para mostrar TODO el texto
+          // En lugar de limitar el área, permitir que se desplace lo suficiente para mostrar todo
+          const scrollDistance = actualTextWidth - containerWidth + 32; // +32px de padding para ver el final completo
+
+          // Crear animación CSS dinámica
+          const styleId = 'dynamic-scroll-animation';
+          let styleElement = document.getElementById(styleId);
+
+          if (!styleElement) {
+            styleElement = document.createElement('style');
+            styleElement.id = styleId;
+            document.head.appendChild(styleElement);
+          }
+
+          // Calcular duración basada en la longitud del texto (más texto = más tiempo)
+          const duration = Math.max(10, Math.min(25, scrollDistance / 6));
+
+          styleElement.textContent = `
+            @keyframes dynamicScrollText {
+              0% { transform: translateX(0); }
+              20% { transform: translateX(0); }
+              70% { transform: translateX(-${scrollDistance}px); }
+              100% { transform: translateX(-${scrollDistance}px); }
+            }
+
+            .current-track-title.scrolling {
+              animation: dynamicScrollText ${duration}s linear infinite !important;
+              text-overflow: clip !important;
+              overflow: hidden !important;
+            }
+          `;
+
+          // Scroll setup completed successfully - removed console.log
+        }
+        // No scroll needed case - removed console.log
+
+        // Marcar como procesado para evitar repeticiones
+        this._lastProcessedTitle = currentTitle;
+        this._scrollSetupComplete = true;
+      }, 100); // 100ms delay para asegurar renderizado completo
+    },
+
     // Navigation
     setCurrentPage(page) {
       this.currentPage = page;
@@ -2201,28 +2794,63 @@ new Vue({
       }
     },
 
-    // Configurar gestión de interacción del usuario para móviles
+    // Configurar gestión de interacción del usuario para móviles y desktop
     setupUserInteractionHandlers() {
-      if (this.isMobile) {
-        const events = ['touchstart', 'touchend', 'click', 'tap'];
-        const handleInteraction = () => {
-          if (!this.userInteracted) {
-            this.userInteracted = true;
-            console.log('[HYBRID] User interaction detected on mobile');
+      const events = this.isMobile ? ['touchstart', 'touchend', 'click', 'tap'] : ['click', 'keydown'];
 
-            // Remover listeners después de la primera interacción
+      // Handler para primera interacción (autoplay inicial)
+      const handleFirstInteraction = () => {
+        if (!this.userInteracted) {
+          this.userInteracted = true;
+          console.log(`[HYBRID] First user interaction detected on ${this.isMobile ? 'mobile' : 'desktop'}`);
+
+            // Si hay un YouTube Player listo y un video cargado, reproducirlo
+            if (this.isUsingYouTubePlayer && this.youtubePlayer) {
+              try {
+                const playerState = this.youtubePlayer.getPlayerState();
+                // Reproducir si el servidor indica que debería estar sonando Y el player no está reproduciendo
+                if (this.state.playing && playerState !== YT.PlayerState.PLAYING) {
+                  console.log(`[HYBRID] Server says playing=true, starting playback from state ${playerState}`);
+                  this.youtubePlayer.playVideo();
+                  console.log('[HYBRID] Auto-playing loaded video after user interaction');
+                } else if (playerState === YT.PlayerState.PAUSED || playerState === YT.PlayerState.CUED) {
+                  this.youtubePlayer.playVideo();
+                  console.log('[HYBRID] Auto-playing paused/cued video after user interaction');
+                }
+              } catch (e) {
+                console.warn('[HYBRID] Error auto-playing after interaction:', e);
+              }
+            }
+
+            // Remover listeners de primera interacción
             events.forEach(event => {
-              document.removeEventListener(event, handleInteraction);
+              document.removeEventListener(event, handleFirstInteraction);
             });
           }
         };
 
-        events.forEach(event => {
-          document.addEventListener(event, handleInteraction, { passive: true });
-        });
-      } else {
-        this.userInteracted = true; // Desktop no necesita interacción previa
-      }
+      // Handler simplificado - solo para botón de mute después de F5
+      const handleAudioActivation = (event) => {
+        // Detectar clics en el botón de mute cuando está auto-muteado después de F5
+        if (this.autoMutedAfterF5) {
+          const target = event.target;
+          const isMuteButton = target.closest('.volume-icon') ||
+                              target.closest('[data-mute-button]') ||
+                              (target.classList && target.classList.contains('volume-icon'));
+
+          if (isMuteButton) {
+            console.log('[INTERACTION] User clicked mute button after F5, reactivating audio');
+            this.autoMutedAfterF5 = false;
+            this.unmutePlayer();
+          }
+        }
+      };
+
+      // Instalar ambos handlers
+      events.forEach(event => {
+        document.addEventListener(event, handleFirstInteraction, { passive: true });
+        document.addEventListener(event, handleAudioActivation, { passive: true });
+      });
     },
 
     // Reproducir usando el sistema híbrido
@@ -2257,8 +2885,22 @@ new Vue({
           }
 
           this.youtubePlayer.loadVideoById(videoId);
-          this.youtubePlayer.playVideo();
-          console.log(`[HYBRID] Using YouTube Player for ${videoId}`);
+
+          // Sincronizar a la posición del servidor después de cargar
+          setTimeout(() => {
+            if (this.state.position && this.state.position > 0) {
+              console.log(`[HYBRID] Syncing YouTube Player to server position: ${this.state.position}s`);
+              this.youtubePlayer.seekTo(this.state.position, true);
+            }
+
+            // Solo reproducir automáticamente si el usuario ha interactuado
+            if (this.userInteracted) {
+              this.youtubePlayer.playVideo();
+              console.log(`[HYBRID] Using YouTube Player for ${videoId} at position ${this.state.position}s`);
+            } else {
+              console.log(`[HYBRID] YouTube Player loaded ${videoId}, waiting for user interaction to play`);
+            }
+          }, 500); // Esperar a que el video se cargue antes de hacer seek
           return true;
         } catch (e) {
           console.warn('[HYBRID] YouTube Player failed, falling back to audio:', e);
@@ -2266,9 +2908,48 @@ new Vue({
         }
       }
 
-      // PRIORIDAD 2: Fallback para móviles - usar audio nativo solo si es necesario
+      // PRIORIDAD 2: Fallback para móviles - esperar un poco más para YouTube Player
       if (this.isMobile) {
-        console.log(`[HYBRID] YouTube Player not ready on mobile, using native audio fallback for ${videoId}`);
+        console.log(`[HYBRID] YouTube Player not ready on mobile, waiting a bit longer for ${videoId}`);
+        // Esperar hasta 3 segundos para que YouTube Player se cargue
+        let attempts = 0;
+        const maxAttempts = 15; // 3 segundos (200ms * 15)
+
+        while (attempts < maxAttempts && (!this.youtubePlayerReady || !this.youtubePlayer)) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          attempts++;
+        }
+
+        // Si ahora YouTube Player está listo, usarlo
+        if (this.youtubePlayerReady && this.youtubePlayer) {
+          console.log(`[HYBRID] YouTube Player ready after waiting, using it for ${videoId}`);
+          try {
+            this.isUsingYouTubePlayer = true;
+            this.youtubePlayer.loadVideoById(videoId);
+
+            // Sincronizar a la posición del servidor después de cargar
+            setTimeout(() => {
+              if (this.state.position && this.state.position > 0) {
+                console.log(`[HYBRID] Syncing YouTube Player to server position after waiting: ${this.state.position}s`);
+                this.youtubePlayer.seekTo(this.state.position, true);
+              }
+
+              // Solo reproducir automáticamente si el usuario ha interactuado
+              if (this.userInteracted) {
+                this.youtubePlayer.playVideo();
+                console.log(`[HYBRID] Playing after sync at position ${this.state.position}s`);
+              } else {
+                console.log(`[HYBRID] YouTube Player loaded ${videoId} after waiting, waiting for user interaction to play`);
+              }
+            }, 500);
+            return true;
+          } catch (e) {
+            console.warn('[HYBRID] YouTube Player failed after waiting, falling back to audio:', e);
+          }
+        }
+
+        // Solo si YouTube Player realmente no funciona, usar audio fallback
+        console.log(`[HYBRID] YouTube Player still not ready after ${maxAttempts * 200}ms, using native audio fallback for ${videoId}`);
         return await this.playMobileAudio(videoId);
       }
 
@@ -2305,15 +2986,45 @@ new Vue({
           console.log(`[HYBRID] Mobile audio playback successful for ${videoId}`);
           return true;
         } else {
-          // Fallback: abrir en YouTube app
-          console.log('[HYBRID] Server stream failed, offering YouTube app option');
-          this.showYouTubeAppOption(videoId);
+          // No hacer auto-skip inmediato si acabamos de cargar la página
+          const timeSincePageLoad = Date.now() - (this._pageLoadTime || Date.now());
+          if (timeSincePageLoad < 15000) {
+            console.log('[HYBRID] Server stream failed after YouTube Player error, but page recently loaded - no auto-skip');
+            this.showNotification('Reconectando...', 'info');
+            return false;
+          }
+
+          // Si tanto YouTube Player como servidor fallaron, hacer auto-skip
+          console.log('[HYBRID] Server stream failed after YouTube Player error, auto-skipping');
+          this.showNotification('Canción no disponible en ninguna fuente, saltando a la siguiente', 'error');
+
+          // Delay breve para que se vea la notificación
+          setTimeout(() => {
+            this.onTrackEnded();
+          }, 1000);
+
           return false;
         }
       } catch (e) {
         console.warn('[HYBRID] Mobile audio failed:', e);
-        // Último recurso: YouTube app
-        this.showYouTubeAppOption(videoId);
+
+        // No hacer auto-skip inmediato si acabamos de cargar la página
+        const timeSincePageLoad = Date.now() - (this._pageLoadTime || Date.now());
+        if (timeSincePageLoad < 15000) {
+          console.log('[HYBRID] Mobile audio failed but page recently loaded - no auto-skip');
+          this.showNotification('Reconectando...', 'info');
+          return false;
+        }
+
+        // Si llegamos aquí, todo falló - hacer auto-skip
+        console.log('[HYBRID] All mobile audio methods failed, auto-skipping');
+        this.showNotification('Error crítico de reproducción, saltando a la siguiente', 'error');
+
+        // Delay breve para que se vea la notificación
+        setTimeout(() => {
+          this.onTrackEnded();
+        }, 1000);
+
         return false;
       }
     },
@@ -2336,6 +3047,24 @@ new Vue({
       }
 
       console.error(`[HYBRID] All playback methods failed for ${videoId}`);
+
+      // No hacer auto-skip inmediato si acabamos de cargar la página
+      const timeSincePageLoad = Date.now() - (this._pageLoadTime || Date.now());
+      if (timeSincePageLoad < 15000) {
+        console.log('[HYBRID] Desktop audio failed but page recently loaded - no auto-skip');
+        this.showNotification('Reconectando...', 'info');
+        return false;
+      }
+
+      // Si llegamos aquí en desktop, también hacer auto-skip
+      console.log('[HYBRID] All desktop audio methods failed, auto-skipping');
+      this.showNotification('Canción no disponible, saltando a la siguiente', 'error');
+
+      // Delay breve para que se vea la notificación
+      setTimeout(() => {
+        this.onTrackEnded();
+      }, 1000);
+
       return false;
     },
 
@@ -2389,11 +3118,84 @@ new Vue({
 
     onYouTubePlayerStateChange(event) {
       const state = event.data;
-      console.log('[HYBRID] YouTube Player state changed:', state);
+      // YouTube Player state changed - removed verbose log
+
+      // Detectar duración cuando el video se carga
+      if (state === YT.PlayerState.CUED || state === YT.PlayerState.BUFFERING) {
+        // Intentar obtener duración tan pronto como el video esté cargado
+        if (this.youtubePlayer && this.isUsingYouTubePlayer) {
+          try {
+            const duration = this.youtubePlayer.getDuration();
+            if (duration && duration > 0 && duration <= 10800) {
+              // Actualizar si la duración ha cambiado significativamente O si tenemos un placeholder
+              const shouldUpdate = Math.abs(this.state.duration - duration) > 1 ||
+                                 this.state.duration === 180 ||
+                                 this.state.duration === 0;
+
+              if (shouldUpdate) {
+                console.log(`[HYBRID] Duration detected early in ${state === YT.PlayerState.CUED ? 'CUED' : 'BUFFERING'} state: ${duration}s`);
+                this.updateDurationIfBetter(duration, 'YouTube Player (Early)');
+              }
+            }
+          } catch (e) {
+            // Silenciar error, la duración puede no estar disponible aún
+          }
+        }
+      }
+
+      // Sincronizar posición cuando el video esté listo
+      if (state === YT.PlayerState.CUED || state === YT.PlayerState.BUFFERING) {
+        // Video está cargado, sincronizar a la posición del servidor
+        if (this.state.position && this.state.position > 0) {
+          setTimeout(() => {
+            try {
+              // Auto-syncing to server position - removed verbose log
+              this.youtubePlayer.seekTo(this.state.position, true);
+
+              // Si debe estar reproduciendo, verificar si es F5 vs nueva pestaña
+              if (this.state.playing && !this.userInteracted) {
+                const isPageReload = this.detectPageReload();
+
+                if (isPageReload) {
+                  console.log(`[HYBRID] F5 detected with playing track, auto-muting for user activation`);
+                  this.autoMutedAfterF5 = true;
+                  this.mutePlayer();
+
+                  // Intentar reproducir sin sonido para mantener sincronización visual
+                  setTimeout(() => {
+                    try {
+                      this.youtubePlayer.playVideo();
+                      // Playing muted after F5 sync - removed verbose log
+                    } catch (e) {
+                      console.log(`[HYBRID] Muted play blocked, will play on next user interaction`);
+                    }
+                  }, 500);
+                } else {
+                  console.log(`[HYBRID] New tab detected with playing track, attempting auto-play`);
+                  // Nueva pestaña - intentar reproducir normalmente
+                  setTimeout(() => {
+                    try {
+                      this.youtubePlayer.playVideo();
+                      console.log(`[HYBRID] Auto-playing on new tab`);
+                    } catch (e) {
+                      console.log(`[HYBRID] Auto-play blocked on new tab, will need user interaction`);
+                      this.autoMutedAfterF5 = true;
+                      this.mutePlayer();
+                    }
+                  }, 500);
+                }
+              }
+            } catch (e) {
+              console.warn('[HYBRID] Error auto-syncing position:', e);
+            }
+          }, 100);
+        }
+      }
 
       // Actualizar estado local basado en YouTube Player
       if (state === YT.PlayerState.PLAYING) {
         this.state.playing = true;
+        this.updateMediaSessionPlaybackState();
 
         // Obtener metadata del video cuando empiece a reproducir
         if (this.youtubePlayer && this.isUsingYouTubePlayer) {
@@ -2402,18 +3204,30 @@ new Vue({
             const videoData = this.youtubePlayer.getVideoData();
 
             if (duration && duration > 0) {
-              // Solo actualizar si la duración ha cambiado significativamente
-              if (Math.abs(this.state.duration - duration) > 1) {
-                this.state.duration = duration;
-                this.state.durationLabel = this.mmss(duration);
-                console.log('[HYBRID] YouTube duration detected:', duration);
+              // Validar que la duración sea sensata (máximo 3 horas = 10800 segundos)
+              if (duration > 10800) {
+                console.warn(`[HYBRID] Ignoring unrealistic duration: ${duration}s (${this.mmss(duration)})`);
+                return; // No actualizar duración si es demasiado larga
+              }
 
-                // Actualizar también en la cola si existe
-                const videoId = this.state.current ? this.state.current.id : null;
-                if (videoId) {
-                  const queueTrack = this.queue.find(t => t.id === videoId);
-                  if (queueTrack && Math.abs((queueTrack.seconds || 0) - duration) > 1) {
-                    queueTrack.seconds = duration;
+              // Actualizar si la duración ha cambiado significativamente O si tenemos un placeholder
+              const shouldUpdate = Math.abs(this.state.duration - duration) > 1 ||
+                                 this.state.duration === 180 ||
+                                 this.state.duration === 0;
+
+              if (shouldUpdate) {
+                // Usar función helper para validar actualización
+                const wasUpdated = this.updateDurationIfBetter(duration, 'YouTube Player');
+
+                if (wasUpdated) {
+                  // Actualizar también en la cola si existe
+                  const videoId = this.state.current ? this.state.current.id : null;
+                  if (videoId) {
+                    const queueTrack = this.queue.find(t => t.id === videoId);
+                    if (queueTrack && (Math.abs((queueTrack.seconds || 0) - duration) > 1 || queueTrack.seconds === 180)) {
+                      queueTrack.seconds = duration;
+                      console.log(`[HYBRID] Queue track duration updated: ${queueTrack.title} -> ${duration}s`);
+                    }
                   }
                 }
               }
@@ -2449,17 +3263,57 @@ new Vue({
 
         // Iniciar ticker para posición
         this.startYouTubePositionTicker();
+
+        // Backup: Intentar detectar duración nuevamente después de un delay
+        // En caso de que no haya estado disponible en CUED/BUFFERING
+        setTimeout(() => {
+          if (this.youtubePlayer && this.isUsingYouTubePlayer && this.state.playing) {
+            try {
+              const duration = this.youtubePlayer.getDuration();
+              if (duration && duration > 0 && duration <= 10800) {
+                const shouldUpdate = Math.abs(this.state.duration - duration) > 1 ||
+                                   this.state.duration === 180 ||
+                                   this.state.duration === 0;
+
+                if (shouldUpdate) {
+                  console.log(`[HYBRID] Duration detected with backup delay: ${duration}s`);
+                  this.updateDurationIfBetter(duration, 'YouTube Player (Backup)');
+                }
+              }
+            } catch (e) {
+              console.warn('[HYBRID] Error in backup duration detection:', e);
+            }
+          }
+        }, 2000); // 2 segundos de delay
       } else if (state === YT.PlayerState.PAUSED || state === YT.PlayerState.ENDED) {
         this.state.playing = false;
+        this.updateMediaSessionPlaybackState();
         this.stopYouTubePositionTicker();
       }
 
       if (state === YT.PlayerState.ENDED) {
-        this.onTrackEnded();
+        // Verificar si realmente terminó o si es un problema de duración
+        const currentTime = this.youtubePlayer ? this.youtubePlayer.getCurrentTime() : 0;
+        const duration = this.youtubePlayer ? this.youtubePlayer.getDuration() : 0;
+
+        console.log(`[HYBRID] Track ended: currentTime=${currentTime}s, duration=${duration}s, stateDuration=${this.state.duration}s`);
+
+        // Solo hacer auto-skip si realmente llegamos cerca del final
+        // IMPORTANTE: No hacer auto-skip si cualquier duración es un placeholder de 180s o 240s
+        const isPlaceholder = duration === 180 || duration === 240 || this.state.duration === 180 || this.state.duration === 240;
+
+        if (duration > 0 && !isPlaceholder && currentTime >= (duration - 2)) {
+          console.log(`[HYBRID] Confirmed track end - auto-skipping`);
+          this.onTrackEnded();
+        } else if (isPlaceholder) {
+          console.log(`[HYBRID] Duration is placeholder (YT: ${duration}s, State: ${this.state.duration}s), ignoring track end event. CurrentTime: ${currentTime}`);
+        } else {
+          console.log(`[HYBRID] False positive track end - ignoring. CurrentTime: ${currentTime}, Duration: ${duration}`);
+        }
       }
     },
 
-    // Ticker para posición de YouTube Player
+    // Ticker para posición de YouTube Player (solo para UI, no interfiere con servidor)
     startYouTubePositionTicker() {
       if (this.youtubePositionInterval) {
         clearInterval(this.youtubePositionInterval);
@@ -2470,14 +3324,24 @@ new Vue({
           try {
             const currentTime = this.youtubePlayer.getCurrentTime();
             if (currentTime !== undefined) {
-              this.state.position = currentTime;
-              this.state.positionLabel = this.mmss(currentTime);
+              // Solo actualizar posición local si es más reciente que la del servidor
+              const serverPosition = this.state.position || 0;
+              const timeDiff = currentTime - serverPosition;
+
+              // Solo actualizar si el cliente está adelantado pero no demasiado
+              if (timeDiff > 0 && timeDiff < 2.0) {
+                this.state.position = currentTime;
+                this.state.positionLabel = this.mmss(currentTime);
+              } else {
+                // Mantener posición del servidor, solo actualizar label
+                this.state.positionLabel = this.mmss(serverPosition);
+              }
             }
           } catch (e) {
             console.warn('[HYBRID] Error getting YouTube position:', e);
           }
         }
-      }, 1000);
+      }, 500); // Aumentar frecuencia para UI más fluida
     },
 
     stopYouTubePositionTicker() {
@@ -2487,11 +3351,48 @@ new Vue({
       }
     },
 
+    // Sincronizar YouTube Player con la posición del servidor
+    syncYouTubePlayer() {
+      if (!this.youtubePlayer || !this.state.current || !this.isUsingYouTubePlayer) {
+        return;
+      }
+
+      try {
+        const serverPosition = this.state.position || 0;
+        const currentPosition = this.youtubePlayer.getCurrentTime() || 0;
+        const playerState = this.youtubePlayer.getPlayerState();
+
+        // Calcular diferencia entre servidor y cliente
+        const drift = Math.abs(serverPosition - currentPosition);
+
+        // Solo corregir si hay drift significativo (más de 2 segundos)
+        if (drift > 2.0) {
+          this.youtubePlayer.seekTo(serverPosition, true);
+        }
+
+        // Sincronizar estado de reproducción
+        if (this.state.playing && playerState !== YT.PlayerState.PLAYING && playerState !== YT.PlayerState.BUFFERING) {
+          this.youtubePlayer.playVideo();
+        } else if (!this.state.playing && playerState === YT.PlayerState.PLAYING) {
+          console.log('[SYNC] Server says not playing, but YouTube Player is playing - pausing');
+          this.youtubePlayer.pauseVideo();
+        }
+
+      } catch (e) {
+        console.warn('[SYNC] Error syncing YouTube Player:', e);
+      }
+    },
+
     onYouTubePlayerError(event) {
       console.error('YouTube Player error:', event.data);
 
       if (this.state.current && this.state.current.id) {
         const videoId = this.state.current.id;
+
+        // Inicializar contador de errores si no existe
+        if (!this._videoErrors) this._videoErrors = new Map();
+        const errorCount = (this._videoErrors.get(videoId) || 0) + 1;
+        this._videoErrors.set(videoId, errorCount);
 
         // Error 150: Video no disponible para reproducción embebida
         if (event.data === 150) {
@@ -2508,6 +3409,23 @@ new Vue({
           return;
         }
 
+        // Errores críticos que requieren skip inmediato
+        const criticalErrors = [101, 102, 100]; // Errors de video no disponible/privado/eliminado
+        if (criticalErrors.includes(event.data)) {
+          console.log(`[HYBRID] Critical error ${event.data} for ${videoId}, skipping to next track`);
+          this.showNotification('Video no disponible, saltando a la siguiente', 'error');
+          this.onTrackEnded();
+          return;
+        }
+
+        // Si hay demasiados errores para este video, skip
+        if (errorCount >= 3) {
+          console.log(`[HYBRID] Too many errors (${errorCount}) for ${videoId}, skipping to next track`);
+          this.showNotification('Demasiados errores, saltando a la siguiente', 'error');
+          this.onTrackEnded();
+          return;
+        }
+
         // Para otros errores, intentar fallback pero evitar bucle infinito
         if (!this.nonEmbeddableVideos.has(videoId)) {
           console.log('Attempting fallback to audio stream...');
@@ -2518,6 +3436,11 @@ new Vue({
           } else {
             this.playServerAudio(videoId);
           }
+        } else {
+          // Si ya intentamos fallback y sigue fallando, skip
+          console.log(`[HYBRID] Video ${videoId} failed with all methods, skipping to next track`);
+          this.showNotification('Canción no reproducible, saltando a la siguiente', 'error');
+          this.onTrackEnded();
         }
       }
     },
@@ -2532,25 +3455,85 @@ new Vue({
 
     onAudioEnded() {
       if (!this.isUsingYouTubePlayer) {
-        this.onTrackEnded();
+        // Validar que no sea un final falso por placeholder de duración
+        const audioElement = this.$refs.audioPlayer;
+        const audioDuration = audioElement ? audioElement.duration : 0;
+        const currentTime = audioElement ? audioElement.currentTime : 0;
+
+        console.log(`[AUDIO] onAudioEnded: currentTime=${currentTime}s, duration=${audioDuration}s, stateDuration=${this.state.duration}s`);
+
+        // No hacer auto-skip si cualquier duración es placeholder de 180s o 240s
+        const isPlaceholder = audioDuration === 180 || audioDuration === 240 || this.state.duration === 180 || this.state.duration === 240;
+
+        if (isPlaceholder) {
+          console.log(`[AUDIO] Duration is placeholder (Audio: ${audioDuration}s, State: ${this.state.duration}s), ignoring onAudioEnded event`);
+          return;
+        }
+
+        // Solo hacer auto-skip si realmente llegamos cerca del final
+        if (audioDuration > 0 && currentTime >= (audioDuration - 2)) {
+          console.log('[AUDIO] Confirmed audio track end - auto-skipping');
+          this.onTrackEnded();
+        } else {
+          console.log(`[AUDIO] False positive onAudioEnded - ignoring. CurrentTime: ${currentTime}, Duration: ${audioDuration}`);
+        }
       }
     },
 
     onAudioLoaded() {
       if (!this.isUsingYouTubePlayer) {
-        this.state.duration = this.$refs.audioPlayer.duration;
-        this.state.durationLabel = this.mmss(this.state.duration);
+        const audioDuration = this.$refs.audioPlayer.duration;
+        this.updateDurationIfBetter(audioDuration, 'Audio Element');
       }
     },
 
     onAudioError(e) {
       console.error('Audio playback error:', e);
+
+      if (this.state.current && this.state.current.id) {
+        const videoId = this.state.current.id;
+
+        // Inicializar contador de errores de audio si no existe
+        if (!this._audioErrors) this._audioErrors = new Map();
+        const errorCount = (this._audioErrors.get(videoId) || 0) + 1;
+        this._audioErrors.set(videoId, errorCount);
+
+        console.log(`[AUDIO] Error #${errorCount} for ${videoId}`);
+
+        // Si hay demasiados errores de audio para este track, skip
+        if (errorCount >= 3) {
+          console.log(`[AUDIO] Too many audio errors (${errorCount}) for ${videoId}, skipping to next track`);
+          this.showNotification('Error de audio persistente, saltando a la siguiente', 'error');
+          this.onTrackEnded();
+          return;
+        }
+      }
+
       this.showNotification('Error al reproducir el audio', 'error');
     },
 
     // Cuando termina una canción
     onTrackEnded() {
-      console.log('Track ended, playing next...');
+      // Verificación adicional para prevenir auto-skip prematuro
+      const currentPos = this.state.position || 0;
+      const currentDuration = this.state.duration || 0;
+
+      // Si la posición actual está cerca de 180s (±5s) y la duración es mayor, podría ser un auto-skip prematuro
+      if (currentDuration > 200 && currentPos >= 175 && currentPos <= 185) {
+        console.warn(`[TRACK-END-GUARD] Suspicious track end at ${currentPos}s with duration ${currentDuration}s - might be premature auto-skip`);
+        console.warn(`[TRACK-END-GUARD] Continuing playback instead of skipping`);
+        return; // No hacer skip
+      }
+
+      console.log(`Track ended at ${currentPos}s/${currentDuration}s, playing next...`);
+
+      // Limpiar contadores de errores para el track actual
+      if (this.state.current && this.state.current.id) {
+        const videoId = this.state.current.id;
+        if (this._videoErrors) this._videoErrors.delete(videoId);
+        if (this._audioErrors) this._audioErrors.delete(videoId);
+      }
+
       this.sendCommand('player:next');
     },
 
@@ -2725,7 +3708,36 @@ new Vue({
 
     mmss(s) {
       s = Math.max(0, Math.floor(s || 0));
+      // Don't show placeholder durations (180 seconds = 3:00)
+      if (s === 180) {
+        return "...";
+      }
       return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+    },
+
+    // Detect truncated titles and add expand arrows
+    activateScrollingTitles() {
+      this.$nextTick(() => {
+        // Check each search result to see if title is truncated
+        this.searchResults.forEach(song => {
+          this.$nextTick(() => {
+            const titleElement = document.querySelector(`[data-song-id="${song.id.videoId}"] .title-text`);
+            if (titleElement) {
+              const containerWidth = titleElement.clientWidth;
+              const textWidth = titleElement.scrollWidth;
+
+              // Mark song as truncated if text overflows
+              this.$set(song, 'titleTruncated', textWidth > containerWidth);
+              this.$set(song, 'titleExpanded', false);
+            }
+          });
+        });
+      });
+    },
+
+    // Toggle title expansion
+    toggleTitleExpansion(song) {
+      this.$set(song, 'titleExpanded', !song.titleExpanded);
     },
 
     // Notification methods
@@ -2794,11 +3806,26 @@ new Vue({
           const preservedTitle = this.state.current && this.state.current.title &&
                                 !this.state.current.title.startsWith('YouTube Video') ?
                                 this.state.current.title : null;
-          const preservedDuration = this.state.duration && this.state.duration !== 180 ?
+          const preservedDuration = this.state.duration && this.state.duration !== 180 && this.state.duration > 0 ?
                                    this.state.duration : null;
+
+          // Preservar duración antes de sobrescribir el estado
+          const oldDuration = this.state.duration;
+          const oldDurationLabel = this.state.durationLabel;
 
           this.state = Object.assign(this.state, data);
           this.queue = data.queue || [];
+
+          // Update Media Session after state change
+          this.updateMediaSessionMetadata();
+          this.updateMediaSessionPlaybackState();
+
+          // Inmediatamente restaurar duración real si el servidor envió placeholder
+          if (preservedDuration && (data.duration === 180 || data.duration === 0 || !data.duration)) {
+            // console.log(`[HYBRID] Server sent placeholder duration ${data.duration}s, restoring real duration ${preservedDuration}s`);
+            this.state.duration = preservedDuration;
+            this.state.durationLabel = this.mmss(preservedDuration);
+          }
 
           // Fetch metadata for queue tracks that need it
           setTimeout(() => this.fetchQueueMetadata(), 100);
@@ -2850,6 +3877,13 @@ new Vue({
           if (newCurrentId && newCurrentId !== oldCurrentId) {
             console.log('[HYBRID] New track detected, using hybrid player:', newCurrentId);
 
+            // Resetear duración cuando cambie la canción para forzar detección
+            if (this.state.duration === 180 || this.state.duration === 0) {
+              console.log('[HYBRID] Resetting placeholder duration for new track');
+              this.state.duration = 0;
+              this.state.durationLabel = '0:00';
+            }
+
             // Forzar reproducción híbrida independientemente del estado del servidor
             if (this.state.playing) {
               this.playHybrid(newCurrentId);
@@ -2857,6 +3891,19 @@ new Vue({
               // Preparar para reproducción cuando se presione play
               console.log('[HYBRID] Track loaded, ready for playback');
             }
+          } else if (newCurrentId && oldCurrentId === null) {
+            // CASO ESPECIAL: Primera conexión/reload con una canción ya sonando
+            console.log('[HYBRID] Page reload detected with current track, reinitializing player:', newCurrentId);
+
+            // Esperar un poco para que el YouTube Player esté listo
+            setTimeout(() => {
+              if (this.state.playing) {
+                console.log('[HYBRID] Restarting playback after reload');
+                this.handleReloadPlayback(newCurrentId);
+              } else {
+                console.log('[HYBRID] Track ready after reload');
+              }
+            }, 1000);
           } else if (!newCurrentId) {
             // No hay canción actual, sincronizar normalmente
             this.syncAudio();
@@ -2865,8 +3912,7 @@ new Vue({
           this.queue = data || [];
           this.markQueueReadiness();
         } else if (type === 'player:tick') {
-          this.state.position = data.position;
-          this.state.positionLabel = data.positionLabel;
+          this.handleServerTick(data.position, data.positionLabel);
           this.syncAudio();
         } else if (type === 'player:next') {
           // Nueva canción iniciada desde el servidor
@@ -2928,16 +3974,38 @@ new Vue({
         this.playHybrid(this.state.current.id);
         // También enviar al servidor para sincronización
         if (this.ws && this.ws.readyState === 1) {
+          console.log('[DEBUG] Sending WebSocket command:', {type, ...data});
           this.ws.send(JSON.stringify({type, ...data}));
+          console.log('[DEBUG] WebSocket command sent successfully');
+        } else {
+          console.error('[DEBUG] WebSocket not ready for sending - readyState:', this.ws ? this.ws.readyState : 'no websocket');
         }
         return;
       }
 
+
+      // Si no hay track actual pero se presiona play, enviar al servidor para autostart
+      if (type === 'player:play' && !this.state.current) {
+        console.log('[PLAY] No current track, sending to server for autostart from queue');
+        console.log('[DEBUG] WebSocket state:', this.ws ? `exists, readyState=${this.ws.readyState}` : 'null');
+        if (this.ws && this.ws.readyState === 1) {
+          console.log('[DEBUG] Sending WebSocket command:', {type, ...data});
+          this.ws.send(JSON.stringify({type, ...data}));
+          console.log('[DEBUG] WebSocket command sent successfully');
+        } else {
+          console.error('[DEBUG] WebSocket not ready for sending - readyState:', this.ws ? this.ws.readyState : 'no websocket');
+        }
+        return;
+      }
       if (type === 'player:pause') {
         this.togglePlayPause();
         // También enviar al servidor para sincronización
         if (this.ws && this.ws.readyState === 1) {
+          console.log('[DEBUG] Sending WebSocket command:', {type, ...data});
           this.ws.send(JSON.stringify({type, ...data}));
+          console.log('[DEBUG] WebSocket command sent successfully');
+        } else {
+          console.error('[DEBUG] WebSocket not ready for sending - readyState:', this.ws ? this.ws.readyState : 'no websocket');
         }
         return;
       }
@@ -2946,14 +4014,27 @@ new Vue({
         this.seekTo(data.at);
         // También enviar al servidor para sincronización
         if (this.ws && this.ws.readyState === 1) {
+          console.log('[DEBUG] Sending WebSocket command:', {type, ...data});
           this.ws.send(JSON.stringify({type, ...data}));
+          console.log('[DEBUG] WebSocket command sent successfully');
+        } else {
+          console.error('[DEBUG] WebSocket not ready for sending - readyState:', this.ws ? this.ws.readyState : 'no websocket');
         }
         return;
       }
 
       // Para otros comandos, enviar normalmente
       if (this.ws && this.ws.readyState === 1) {
+        // Solo log para comandos importantes, no para state:get
+        if (type !== 'state:get') {
+          console.log('[DEBUG] Sending WebSocket command:', {type, ...data});
+        }
         this.ws.send(JSON.stringify({type, ...data}));
+        if (type !== 'state:get') {
+          console.log('[DEBUG] WebSocket command sent successfully');
+        }
+      } else {
+        console.error('[DEBUG] WebSocket not ready for sending - readyState:', this.ws ? this.ws.readyState : 'no websocket');
       }
     },
 
@@ -2994,11 +4075,88 @@ new Vue({
       this.wsSend('state:get', {});
     },
 
+    // Detectar si es un reload (F5) vs una nueva pestaña
+    detectPageReload() {
+      // Método 1: Performance Navigation API
+      if (performance && performance.navigation && performance.navigation.type === performance.navigation.TYPE_RELOAD) {
+        return true;
+      }
+
+      // Método 2: Performance getEntriesByType (más moderno)
+      if (performance && performance.getEntriesByType) {
+        const navEntries = performance.getEntriesByType('navigation');
+        if (navEntries.length > 0 && navEntries[0].type === 'reload') {
+          return true;
+        }
+      }
+
+      // Método 3: sessionStorage como fallback
+      if (sessionStorage.getItem('music_app_loaded')) {
+        // Ya estaba cargado en esta sesión, probablemente es F5
+        return true;
+      } else {
+        // Primera carga en esta sesión, probablemente nueva pestaña
+        sessionStorage.setItem('music_app_loaded', 'true');
+        return false;
+      }
+    },
+
+    // Manejar tick del servidor de forma inteligente para evitar saltos hacia atrás
+    handleServerTick(serverPosition, serverPositionLabel) {
+      if (!this.isUsingYouTubePlayer || !this.youtubePlayer) {
+        // Si no estamos usando YouTube Player, actualizar directamente
+        this.state.position = serverPosition;
+        this.state.positionLabel = serverPositionLabel;
+        return;
+      }
+
+      try {
+        const currentPosition = this.youtubePlayer.getCurrentTime() || 0;
+        const timeDiff = serverPosition - currentPosition;
+
+        // Si el servidor está adelantado (posición mayor), siempre actualizar
+        if (timeDiff > 0) {
+          this.state.position = serverPosition;
+          this.state.positionLabel = serverPositionLabel;
+          return;
+        }
+
+        // Si el cliente está adelantado, solo actualizar si la diferencia es significativa
+        const absDiff = Math.abs(timeDiff);
+        if (absDiff > 3.0) {
+          // Diferencia muy grande, probablemente hay un problema - forzar sync
+          console.log(`[TICK] Large time difference detected (${absDiff.toFixed(1)}s), forcing sync to server position`);
+          this.state.position = serverPosition;
+          this.state.positionLabel = serverPositionLabel;
+        } else if (absDiff > 1.0) {
+          // Diferencia mediana, actualizar suavemente
+          console.log(`[TICK] Client ahead by ${absDiff.toFixed(1)}s, keeping client position`);
+          // Mantener posición del cliente, solo actualizar label si es necesario
+          this.state.positionLabel = this.mmss(currentPosition);
+        } else {
+          // Diferencia pequeña, mantener posición del cliente
+          this.state.positionLabel = this.mmss(currentPosition);
+        }
+
+      } catch (e) {
+        // Si hay error, usar posición del servidor como fallback
+        console.warn('[TICK] Error getting YouTube position, using server position:', e);
+        this.state.position = serverPosition;
+        this.state.positionLabel = serverPositionLabel;
+      }
+    },
+
     // Audio synchronization
     syncAudio() {
       const audio = document.getElementById('audio');
       if (!this.state.current) {
         audio.pause();
+        return;
+      }
+
+      // Si estamos usando YouTube Player, sincronizar con el servidor
+      if (this.isUsingYouTubePlayer) {
+        this.syncYouTubePlayer();
         return;
       }
 
@@ -3030,19 +4188,236 @@ new Vue({
 
     setVolume(value) {
       this.volume = parseFloat(value);
+
+      // Si el usuario cambia el volumen después de auto-mute, reactivar audio
+      if (this.autoMutedAfterF5 && parseFloat(value) > 0) {
+        console.log('[VOLUME] User adjusted volume after F5 auto-mute, reactivating audio');
+        this.autoMutedAfterF5 = false;
+        this.unmutePlayer();
+      }
+
       this.applyVolume();
+    },
+
+    // Mutear el player después de F5
+    mutePlayer() {
+      console.log('[MUTE] Auto-muting player after F5');
+      this.muted = true;
+      this.applyVolume();
+    },
+
+    // Desmutear el player cuando el usuario ajusta volumen
+    unmutePlayer() {
+      console.log('[MUTE] User unmuting player');
+      this.muted = false;
+      this.applyVolume();
+
+      // Forzar activación de audio si es necesario
+      if (this.isUsingYouTubePlayer && this.youtubePlayer && this.state.playing) {
+        setTimeout(() => {
+          this.forceYouTubeAudioActivation();
+        }, 200);
+      }
+    },
+
+    // Handle playback restart after page reload
+    async handleReloadPlayback(videoId) {
+      console.log('[RELOAD] Handling playback restart for:', videoId);
+
+      // Resetear flags del sistema híbrido
+      this.isUsingYouTubePlayer = false;
+
+      // Asegurar que el volumen esté aplicado
+      setTimeout(() => this.applyVolume(), 100);
+
+      // Forzar reinicio del reproductor híbrido
+      try {
+        await this.playHybrid(videoId);
+        console.log('[RELOAD] Playback restarted successfully');
+
+        // Auto-mutear si está reproduciendo después del reload
+        if (this.isUsingYouTubePlayer && this.youtubePlayer && this.state.playing) {
+          setTimeout(() => {
+            this.autoMutedAfterF5 = true;
+            this.mutePlayer();
+            console.log('[RELOAD] Auto-muted after successful restart - user can unmute to activate audio');
+          }, 500);
+        }
+
+      } catch (error) {
+        console.warn('[RELOAD] Error restarting playback:', error);
+        // Fallback: intentar de nuevo después de un breve delay
+        setTimeout(() => {
+          this.playHybrid(videoId);
+        }, 2000);
+      }
+    },
+
+    // Force playback to start if it's pending user interaction
+    forcePlaybackIfPending() {
+      // Solo procesar si realmente hay reproducción pendiente
+      if (!this.isUsingYouTubePlayer || !this.youtubePlayer || !this.state.playing || this.userInteracted) {
+        return; // No hay nada que hacer
+      }
+
+      console.log(`[INTERACTION] User interaction detected, starting pending playback`);
+
+      if (this.isUsingYouTubePlayer && this.youtubePlayer && this.state.playing && !this.userInteracted) {
+        console.log('[INTERACTION] User interacted, starting pending YouTube playback');
+        this.userInteracted = true;
+        try {
+          // Sincronizar a la posición actual del servidor antes de reproducir
+          if (this.state.position && this.state.position > 0) {
+            console.log(`[INTERACTION] Syncing to server position: ${this.state.position}s`);
+            this.youtubePlayer.seekTo(this.state.position, true);
+          }
+
+          this.youtubePlayer.playVideo();
+          this.applyVolume(); // Ensure volume is applied
+
+          // Forzar activación del audio después de un breve delay
+          setTimeout(() => {
+            console.log('[INTERACTION] Auto-triggering audio activation fix');
+            this.forceYouTubeAudioActivation();
+          }, 500);
+
+          console.log(`[INTERACTION] Playback started at position ${this.state.position}s`);
+        } catch (e) {
+          console.warn('[INTERACTION] Error starting pending playback:', e);
+        }
+      } else if (this.isUsingYouTubePlayer && this.youtubePlayer && this.state.playing && this.userInteracted) {
+        // Usuario ya interactuó pero tal vez el video no está reproduciendo
+        try {
+          const playerState = this.youtubePlayer.getPlayerState();
+          if (playerState !== YT.PlayerState.PLAYING) {
+            console.log(`[INTERACTION] User already interacted, but video not playing (state: ${playerState}), starting now`);
+
+            // Asegurar que el volumen no esté silenciado
+            if (this.youtubePlayer.isMuted()) {
+              console.log('[INTERACTION] YouTube Player was muted, unmuting');
+              this.youtubePlayer.unMute();
+            }
+
+            // Asegurar volumen adecuado
+            this.youtubePlayer.setVolume(this.volume * 100);
+
+            // Reproducir
+            this.youtubePlayer.playVideo();
+
+            // Forzar activación del audio inmediatamente para casos de F5
+            setTimeout(() => {
+              console.log('[INTERACTION] Auto-triggering audio activation fix for already interacted user');
+              this.forceYouTubeAudioActivation();
+            }, 500);
+
+            console.log('[INTERACTION] Audio should now be playing');
+          }
+        } catch (e) {
+          console.warn('[INTERACTION] Error checking/starting playback:', e);
+        }
+      }
+    },
+
+    // Force YouTube Player audio to activate after reload
+    forceYouTubeAudioActivation() {
+      if (this.isUsingYouTubePlayer && this.youtubePlayer && this.state.playing) {
+        try {
+          console.log('[AUDIO-FIX] Forcing YouTube Player audio activation');
+
+          // 1. Pausar momentáneamente
+          this.youtubePlayer.pauseVideo();
+
+          setTimeout(() => {
+            // 2. Asegurar volumen y unmute
+            if (this.youtubePlayer.isMuted()) {
+              this.youtubePlayer.unMute();
+            }
+            this.youtubePlayer.setVolume(this.volume * 100);
+
+            // 3. Volver a la posición correcta
+            if (this.state.position && this.state.position > 0) {
+              this.youtubePlayer.seekTo(this.state.position, true);
+            }
+
+            // 4. Reproducir de nuevo
+            this.youtubePlayer.playVideo();
+
+            console.log('[AUDIO-FIX] YouTube Player audio should now be active');
+          }, 200);
+        } catch (e) {
+          console.warn('[AUDIO-FIX] Error forcing audio activation:', e);
+        }
+      }
+    },
+
+    // Emergency function to manually fix audio (call from console)
+    fixAudioEmergency() {
+      console.log('[EMERGENCY] Manual audio fix triggered');
+      if (this.isUsingYouTubePlayer && this.youtubePlayer) {
+        this.forceYouTubeAudioActivation();
+      } else {
+        console.log('[EMERGENCY] Not using YouTube Player, trying regular audio');
+        this.syncAudio();
+      }
     },
 
     applyVolume() {
       if (this.volume <= 0) this.volume = 0.01;
-      document.getElementById('audio').volume = this.volume;
+
+      // Aplicar volumen al sistema híbrido (YouTube Player)
+      if (this.isUsingYouTubePlayer && this.youtubePlayer) {
+        try {
+          // Asegurar que no esté silenciado
+          if (this.youtubePlayer.isMuted() && !this.muted) {
+            console.log('[VOLUME] YouTube Player was muted but should not be, unmuting');
+            this.youtubePlayer.unMute();
+          }
+
+          // Aplicar volumen
+          this.youtubePlayer.setVolume(this.volume * 100); // YouTube usa 0-100
+          // Volume applied to YouTube Player - removed verbose log
+
+          // Si está silenciado por nuestra app, silenciar YouTube Player
+          if (this.muted) {
+            this.youtubePlayer.mute();
+          }
+        } catch (e) {
+          console.warn('Error setting YouTube Player volume:', e);
+        }
+      }
+
+      // Aplicar volumen al audio element (fallback)
+      const audioElement = document.getElementById('audio');
+      if (audioElement) {
+        audioElement.volume = this.volume;
+      }
+
       localStorage.setItem('vol', String(this.volume));
       if (this.volume > 0 && this.muted) this.muted = false;
     },
 
     toggleMute() {
       this.muted = !this.muted;
-      document.getElementById('audio').muted = this.muted;
+
+      // Aplicar mute al sistema híbrido (YouTube Player)
+      if (this.isUsingYouTubePlayer && this.youtubePlayer) {
+        try {
+          if (this.muted) {
+            this.youtubePlayer.mute();
+          } else {
+            this.youtubePlayer.unMute();
+          }
+        } catch (e) {
+          console.warn('Error setting YouTube Player mute:', e);
+        }
+      }
+
+      // Aplicar mute al audio element (fallback)
+      const audioElement = document.getElementById('audio');
+      if (audioElement) {
+        audioElement.muted = this.muted;
+      }
+
       try {
         localStorage.setItem('muted', String(this.muted));
       } catch (e) {
@@ -3050,6 +4425,7 @@ new Vue({
         console.warn('No se pudo guardar estado de mute:', e);
       }
     },
+
 
     applyRate() {
       if (!this.rate || this.rate < 0.5) this.rate = 1;
@@ -3292,6 +4668,10 @@ new Vue({
         });
 
         this.setCurrentPage('search');
+        // Activar animación de títulos largos después de que el DOM se actualice
+        this.$nextTick(() => {
+          this.activateScrollingTitles();
+        });
       } catch(e) {
         console.log(`[SEARCH] Servidor falló: ${e.message}, intentando fallback frontend...`);
         await this.searchMusicFrontend();
@@ -3343,6 +4723,10 @@ new Vue({
           });
 
           this.setCurrentPage('search');
+          // Activar animación de títulos largos después de que el DOM se actualice
+          this.$nextTick(() => {
+            this.activateScrollingTitles();
+          });
         } else {
           console.log('[SEARCH] Frontend sin resultados');
           this.searchResults = [];
@@ -4159,30 +5543,177 @@ new Vue({
              (!track.seconds && !track._failed);
     },
 
-    // Update refreshQueue to handle optimistic updates
-    async refreshQueue() {
-      const before = Date.now();
-      try {
-        const resp = await fetch(`/api/rooms/${this.roomName}/queue`);
-        if (resp.ok) {
-          const newQueue = await resp.json();
+    // ===== MOBILE BACKGROUND PLAYBACK SUPPORT =====
 
-          // Remove optimistic tracks that are now in the real queue
-          newQueue.forEach(realTrack => {
-            const optimisticIndex = this.queue.findIndex(t => t.id === realTrack.id && t._optimistic);
-            if (optimisticIndex !== -1) {
-              this.queue.splice(optimisticIndex, 1);
-              console.log(`[UX] Removed optimistic track ${realTrack.id} - now real`);
-            }
-          });
+    // Initialize Media Session API for background playback controls
+    initMediaSession() {
+      if (!('mediaSession' in navigator)) {
+        console.log('[MEDIA-SESSION] Media Session API not supported');
+        return;
+      }
 
-          // Update queue with real data
-          this.queue = [...this.queue.filter(t => t._optimistic), ...newQueue];
+      console.log('[MEDIA-SESSION] Initializing Media Session API');
 
-          console.log(`[QUEUE] Updated. Duration: ${Date.now() - before}ms`);
+      // Set up action handlers for native media controls
+      navigator.mediaSession.setActionHandler('play', () => {
+        console.log('[MEDIA-SESSION] Play action triggered');
+        this.wsSend('player:play', {});
+      });
+
+      navigator.mediaSession.setActionHandler('pause', () => {
+        console.log('[MEDIA-SESSION] Pause action triggered');
+        this.wsSend('player:pause', {});
+      });
+
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        console.log('[MEDIA-SESSION] Next track action triggered');
+        this.wsSend('player:next', {});
+      });
+
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        console.log('[MEDIA-SESSION] Previous track action (not implemented)');
+        // Could implement previous track functionality here
+      });
+
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        console.log('[MEDIA-SESSION] Seek action triggered to:', details.seekTime);
+        if (details.seekTime !== undefined) {
+          this.wsSend('player:seek', { at: details.seekTime });
         }
-      } catch(e) {
-        console.error('[QUEUE] Error:', e);
+      });
+    },
+
+    // Update Media Session metadata when track changes
+    updateMediaSessionMetadata() {
+      if (!('mediaSession' in navigator) || !this.state.current) {
+        return;
+      }
+
+      const track = this.state.current;
+      const artwork = [{
+        src: this.thumb(track.id),
+        sizes: '512x512',
+        type: 'image/jpeg'
+      }];
+
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: track.title || 'Unknown Track',
+        artist: track.uploader || 'Unknown Artist',
+        album: 'Music Player',
+        artwork: artwork
+      });
+
+      // Media session metadata updated
+    },
+
+    // Update Media Session playback state
+    updateMediaSessionPlaybackState() {
+      if (!('mediaSession' in navigator)) {
+        return;
+      }
+
+      navigator.mediaSession.playbackState = this.state.playing ? 'playing' : 'paused';
+      // console.log('[MEDIA-SESSION] Updated playback state:', navigator.mediaSession.playbackState);
+    },
+
+    // Initialize Page Visibility API to handle background behavior
+    initVisibilityAPI() {
+      if (typeof document.hidden === "undefined") {
+        console.log('[VISIBILITY] Page Visibility API not supported');
+        return;
+      }
+
+      console.log('[VISIBILITY] Initializing Page Visibility API');
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          // App went to background
+          this.handleAppBackground();
+        } else {
+          // App came to foreground
+          this.handleAppForeground();
+        }
+      }, false);
+    },
+
+    // Handle app going to background
+    handleAppBackground() {
+      // App in background, maintaining connection
+
+      // Ensure WebSocket stays connected
+      if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
+        console.log('[BACKGROUND] Reconnecting WebSocket for background playback');
+        this.connectWS();
+      }
+
+      // For YouTube Player, try to keep it playing
+      if (this.isUsingYouTubePlayer && this.youtubePlayer && this.state.playing) {
+        try {
+          // The YouTube Player should continue playing in background
+          console.log('[BACKGROUND] YouTube Player should continue in background');
+        } catch (e) {
+          console.warn('[BACKGROUND] Error maintaining YouTube Player:', e);
+        }
+      }
+
+      // For audio elements, ensure they have proper attributes for background play
+      if (this.$refs.audioPlayer) {
+        this.$refs.audioPlayer.setAttribute('playsinline', '');
+        console.log('[BACKGROUND] Audio element configured for background play');
+      }
+    },
+
+    // Handle app coming to foreground
+    handleAppForeground() {
+      // App back in foreground
+
+      // Sync state with server
+      this.wsSend('state:get', {});
+
+      // Refresh current position
+      setTimeout(() => {
+        this.syncAudio();
+      }, 500);
+    },
+
+    // Initialize Wake Lock API (experimental) to prevent device sleep
+    async initWakeLock() {
+      if (!('wakeLock' in navigator)) {
+        console.log('[WAKE-LOCK] Wake Lock API not supported');
+        return;
+      }
+
+      try {
+        this.wakeLock = await navigator.wakeLock.request('screen');
+        console.log('[WAKE-LOCK] Screen wake lock acquired');
+
+        this.wakeLock.addEventListener('release', () => {
+          console.log('[WAKE-LOCK] Screen wake lock was released');
+        });
+      } catch (err) {
+        console.log('[WAKE-LOCK] Could not acquire screen wake lock:', err.message);
+      }
+    },
+
+    // Release wake lock when not needed
+    releaseWakeLock() {
+      if (this.wakeLock) {
+        this.wakeLock.release();
+        this.wakeLock = null;
+        console.log('[WAKE-LOCK] Wake lock released');
+      }
+    }
+  },
+
+  watch: {
+    // Watcher para detectar cambios en el título actual
+    'state.current.title'() {
+      if (this.isMobile) {
+        // Resetear marca de procesado cuando cambie el título
+        this._scrollSetupComplete = false;
+        this.$nextTick(() => {
+          this.setupTitleScrolling();
+        });
       }
     }
   },
@@ -4191,6 +5722,9 @@ new Vue({
     // Initialize values
     if (!this.rate || this.rate < 0.5) this.rate = 1;
     if (this.volume <= 0) this.volume = 0.8;
+
+    // Marcar timestamp de carga de página para evitar auto-skip agresivo después de F5
+    this._pageLoadTime = Date.now();
 
     // Load playlist volume settings
     this.loadPlaylistVolume();
@@ -4202,6 +5736,15 @@ new Vue({
       // Detectar tipo de dispositivo primero
       this.detectMobileDevice();
       this.setupUserInteractionHandlers();
+
+      // Initialize background playback support
+      this.initMediaSession();
+      this.initVisibilityAPI();
+
+      // Initialize wake lock for mobile devices
+      if (this.isMobile) {
+        this.initWakeLock();
+      }
 
       // Detectar ad blocker (solo desktop)
       if (!this.isMobile) {
@@ -4237,6 +5780,9 @@ new Vue({
     this.applyVolume();
     this.applyRate();
     audio.muted = this.muted;
+
+    // Make emergency audio fix available globally for debugging
+    window.fixAudio = () => this.fixAudioEmergency();
 
     audio.addEventListener('canplay', () => {
       // Ensure volume and mute are applied when audio is ready
@@ -4277,9 +5823,24 @@ new Vue({
 
         if (this._audioRetries[currentId] > 3) {
           console.error('Demasiados reintentos para', currentId);
-          // Pausar el audio element, no el componente
-          audio.pause();
+
+          // No hacer auto-skip si acabamos de hacer F5 (primeros 10 segundos)
+          const timeSincePageLoad = Date.now() - (this._pageLoadTime || Date.now());
+          if (timeSincePageLoad < 10000) {
+            console.log(`[AUTO-SKIP] Skipping auto-skip due to recent page load (${timeSincePageLoad}ms ago)`);
+            delete this._audioRetries[currentId];
+            audio.pause();
+            return;
+          }
+
+          // Limpiar estado de reintentos
           delete this._audioRetries[currentId];
+          // Pausar el audio element
+          audio.pause();
+          // Auto-skip a la siguiente canción
+          console.log(`[AUTO-SKIP] Too many stream errors for ${currentId}, skipping to next track`);
+          this.showNotification('Error de conexión persistente, saltando a la siguiente', 'error');
+          this.onTrackEnded();
           return;
         }
 
@@ -4294,8 +5855,32 @@ new Vue({
 
     // Handle end of track - auto advance to next
     audio.addEventListener('ended', () => {
-      console.log('Canción terminada, avanzando a la siguiente...');
-      this.next();
+      // No hacer auto-skip si estamos usando YouTube Player
+      if (this.isUsingYouTubePlayer) {
+        console.log('Audio element ended but using YouTube Player - ignoring');
+        return;
+      }
+
+      // No hacer auto-skip si cualquier duración es placeholder de 180s o 240s
+      const audioDuration = audio.duration;
+      const currentTime = audio.currentTime;
+
+      console.log(`[AUDIO] Track ended: currentTime=${currentTime}s, duration=${audioDuration}s, stateDuration=${this.state.duration}s`);
+
+      const isPlaceholder = audioDuration === 180 || audioDuration === 240 || this.state.duration === 180 || this.state.duration === 240;
+
+      if (isPlaceholder) {
+        console.log(`[AUDIO] Duration is placeholder (Audio: ${audioDuration}s, State: ${this.state.duration}s), ignoring audio end event`);
+        return;
+      }
+
+      // Solo hacer auto-skip si realmente llegamos cerca del final
+      if (audioDuration > 0 && currentTime >= (audioDuration - 2)) {
+        console.log('Canción terminada, avanzando a la siguiente...');
+        this.next();
+      } else {
+        console.log(`[AUDIO] False positive end event - ignoring. CurrentTime: ${currentTime}, Duration: ${audioDuration}`);
+      }
     });
 
     // Load available rooms

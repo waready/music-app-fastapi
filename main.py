@@ -146,8 +146,9 @@ def _search_youtube_with_library(query: str, max_results: int = 20) -> List[Dict
     try:
         print(f"[YOUTUBE-SEARCH] Buscando: {query} (max: {max_results})")
 
-        # Usar youtube-search-python
-        results = YoutubeSearch(query, max_results=max_results).to_dict()
+        # Usar youtube-search
+        search = YoutubeSearch(query, max_results=max_results)
+        results = search.to_dict()
 
         formatted_results = []
         for video in results:
@@ -911,8 +912,15 @@ async def ticker():
                 continue
             pos = room.player.pos()
             await room.broadcast({"type":"player:tick","data":{"position":pos,"positionLabel":mmss(pos)}})
+            # No hacer auto-advance si la duración es un placeholder conocido (180s, 240s)
+            # para dar tiempo a que el cliente detecte la duración real
             if room.player.duration and pos >= room.player.duration - 0.3:
-                await room_cmd_next(room)
+                if room.player.duration in [180, 240]:
+                    if int(pos) % 5 == 0:  # Log every 5 seconds near the end
+                        print(f"[TICKER] SKIPPING auto-advance at {pos:.1f}s - duration is placeholder ({room.player.duration}s)")
+                else:
+                    print(f"[TICKER] Auto-advancing track at {pos:.1f}s/{room.player.duration}s")
+                    await room_cmd_next(room)
 
 app = FastAPI(title="Music Realtime FastAPI")
 
@@ -1710,6 +1718,8 @@ async def ws_room_endpoint(ws: WebSocket, room_id: str):
         while True:
             msg = await ws.receive_json()
             t = msg.get("type")
+            if t == "player:update_duration":  # Solo log para este comando específico
+                print(f"[DEBUG] WebSocket received: type={t}, msg={msg}")
             # print(f"[DEBUG] WebSocket received: type={t}, msg={msg}")  # Comentado para reducir spam
 
             if t == "queue:add":
@@ -1778,6 +1788,23 @@ async def ws_room_endpoint(ws: WebSocket, room_id: str):
                 await room_cmd_seek(room, float(msg.get("at") or 0))
             elif t == "player:next":
                 await room_cmd_next(room)
+            elif t == "player:update_duration":
+                # Comando para que el cliente actualice la duración real detectada
+                print(f"[DEBUG] Received player:update_duration command: {msg}")
+                new_duration = float(msg.get("duration", 0))
+                print(f"[DEBUG] Parsed duration: {new_duration}s, current server duration: {room.player.duration}s")
+                if new_duration > 0 and room.player.current_id:
+                    print(f"[DURATION-UPDATE] Client detected real duration: {new_duration}s (was: {room.player.duration}s)")
+                    # Solo actualizar si es significativamente diferente y mejor que placeholder
+                    if (room.player.duration in [180, 240] or
+                        abs(room.player.duration - new_duration) > 2):
+                        room.player.duration = new_duration
+                        print(f"[DURATION-UPDATE] Server duration updated to {new_duration}s")
+                        await room_broadcast_state(room)
+                    else:
+                        print(f"[DURATION-UPDATE] Duration not updated - not significant difference")
+                else:
+                    print(f"[DURATION-UPDATE] Command ignored - new_duration: {new_duration}, current_id: {room.player.current_id}")
             elif t == "state:get":
                 await ws.send_json({"type":"state","data":{
                     **room.public_state(),

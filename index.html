@@ -14,8 +14,8 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <meta name="version" content="1.1.1">
-  <meta name="build-time" content="2025-10-30-19-38">
+  <meta name="version" content="1.1.2">
+  <meta name="build-time" content="2025-10-30-19-53">
 
   <title>Music Player - Spotify Style</title>
   <link href="https://fonts.googleapis.com/css2?family=Circular+Std:wght@400;500;700&display=swap" rel="stylesheet">
@@ -29,8 +29,8 @@
 
     // Cache Busting and Version Management
     (function() {
-      const APP_VERSION = '1.1.1';
-      const BUILD_TIME = '2025-10-30-19-38';
+      const APP_VERSION = '1.1.2';
+      const BUILD_TIME = '2025-10-30-19-53';
 
       // Store current version info
       window.APP_INFO = {
@@ -1188,30 +1188,30 @@
       /* EMERGENCY: Extreme padding for Android devices */
       @media screen and (max-width: 768px) {
         .player {
-          padding-bottom: 120px !important;
-          margin-bottom: 20px !important;
+          padding-bottom: 200px !important;
+          margin-bottom: 30px !important;
         }
       }
 
       /* Android devices with traditional navigation buttons */
       @media screen and (max-height: 640px) and (orientation: landscape) {
         .player {
-          padding-bottom: 140px !important;
+          padding-bottom: 220px !important;
         }
       }
 
       /* Portrait mode - most common scenario */
       @media screen and (max-width: 768px) and (orientation: portrait) {
         .player {
-          padding-bottom: 120px !important;
-          margin-bottom: 30px !important;
+          padding-bottom: 200px !important;
+          margin-bottom: 40px !important;
         }
       }
 
       /* iOS devices with home indicator */
       @supports (padding-bottom: env(safe-area-inset-bottom)) {
         .player {
-          padding-bottom: max(120px, calc(2rem + env(safe-area-inset-bottom, 0px) + var(--mobile-nav-offset))) !important;
+          padding-bottom: max(200px, calc(3rem + env(safe-area-inset-bottom, 0px) + var(--mobile-nav-offset))) !important;
         }
       }
 
@@ -2430,13 +2430,13 @@
       </div>
 
       <div class="player-controls">
-        <button class="control-btn" @click="forcePlaybackIfPending(); wsSend('player:play', {})">
+        <button class="control-btn" @click="userPaused = false; forcePlaybackIfPending(); wsSend('player:play', {})">
           <svg class="icon" viewBox="0 0 24 24">
             <path d="M8 5v14l11-7z"/>
           </svg>
         </button>
 
-        <button class="control-btn play-pause-btn" @click="forcePlaybackIfPending(); wsSend('player:pause', {})">
+        <button class="control-btn play-pause-btn" @click="userPaused = true; forcePlaybackIfPending(); wsSend('player:pause', {})">
           <svg class="icon" viewBox="0 0 24 24">
             <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
           </svg>
@@ -2649,6 +2649,12 @@ new Vue({
     rate: Number(localStorage.getItem('rate') ?? 1),
     needUserGesture: false,
     pollTimer: null,
+
+    // Background playback control
+    userPaused: false,
+    wasPlayingBeforeBackground: false,
+    backgroundHeartbeat: null,
+    wakeLock: null,
 
     // Rooms system
     currentRoom: localStorage.getItem('currentRoom') || 'default',
@@ -5983,6 +5989,67 @@ new Vue({
       // console.log('[MEDIA-SESSION] Updated playback state:', navigator.mediaSession.playbackState);
     },
 
+    // Setup background audio configuration
+    setupBackgroundAudio() {
+      console.log('[BACKGROUND] Setting up background audio configuration...');
+
+      this.$nextTick(() => {
+        const audio = this.$refs.audioPlayer;
+        if (audio) {
+          // Configure audio element for background playback
+          audio.setAttribute('playsinline', '');
+          audio.preload = 'auto';
+
+          // Add event listeners for background audio control
+          audio.addEventListener('pause', (e) => {
+            if (this.state.playing && !this.userPaused && !document.hidden) {
+              console.log('[BACKGROUND] Audio paused unexpectedly, attempting resume...');
+              setTimeout(() => {
+                if (this.state.playing && !this.userPaused) {
+                  audio.play().catch(err => {
+                    console.warn('[BACKGROUND] Resume failed:', err);
+                  });
+                }
+              }, 100);
+            }
+          });
+
+          audio.addEventListener('play', () => {
+            if (this.state.playing) {
+              console.log('[BACKGROUND] Audio playing, updating media session...');
+              this.updateMediaSessionMetadata();
+            }
+          });
+
+          audio.addEventListener('ended', () => {
+            console.log('[BACKGROUND] Audio ended, playing next track...');
+            this.wsSend('player:next', {});
+          });
+
+          console.log('[BACKGROUND] Audio element configured for background playback');
+        }
+
+        // Configure document visibility for better background handling
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden) {
+            // Going to background
+            console.log('[BACKGROUND] Page hidden, maintaining audio...');
+          } else {
+            // Coming to foreground
+            console.log('[BACKGROUND] Page visible, checking audio state...');
+            setTimeout(() => {
+              if (this.state.playing && audio && audio.paused) {
+                console.log('[BACKGROUND] Resuming audio after visibility change...');
+                audio.play().catch(err => {
+                  console.warn('[BACKGROUND] Resume after visibility failed:', err);
+                });
+              }
+            }, 500);
+          }
+        });
+      });
+    },
+
     // Initialize Page Visibility API to handle background behavior
     initVisibilityAPI() {
       if (typeof document.hidden === "undefined") {
@@ -6005,37 +6072,96 @@ new Vue({
 
     // Handle app going to background
     handleAppBackground() {
-      // App in background, maintaining connection
+      console.log('[BACKGROUND] App going to background, maintaining playback...');
 
       // Remember if we were playing when going to background
       this.wasPlayingBeforeBackground = this.state.playing;
 
-      // Ensure WebSocket stays connected
-      if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
-        console.log('[BACKGROUND] Reconnecting WebSocket for background playback');
-        this.connectWS();
-      }
+      // CRITICAL: Don't pause when going to background
+      if (this.state.playing) {
+        console.log('[BACKGROUND] Keeping playback active in background');
 
-      // For YouTube Player, try to keep it playing
-      if (this.isUsingYouTubePlayer && this.youtubePlayer && this.state.playing) {
-        try {
-          // The YouTube Player should continue playing in background
-          console.log('[BACKGROUND] YouTube Player should continue in background');
-        } catch (e) {
-          console.warn('[BACKGROUND] Error maintaining YouTube Player:', e);
+        // Set up periodic heartbeat to keep session alive
+        this.backgroundHeartbeat = setInterval(() => {
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.wsSend('player:heartbeat', { playing: true });
+          }
+          console.log('[BACKGROUND] Heartbeat sent');
+        }, 15000); // Every 15 seconds
+
+        // Ensure WebSocket stays connected
+        if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
+          console.log('[BACKGROUND] Reconnecting WebSocket for background playback');
+          this.connectWS();
         }
-      }
 
-      // For audio elements, ensure they have proper attributes for background play
-      if (this.$refs.audioPlayer) {
-        this.$refs.audioPlayer.setAttribute('playsinline', '');
-        console.log('[BACKGROUND] Audio element configured for background play');
+        // For YouTube Player, ensure it continues playing
+        if (this.isUsingYouTubePlayer && this.youtubePlayer) {
+          try {
+            const playerState = this.youtubePlayer.getPlayerState();
+            if (playerState === 1) { // Playing
+              console.log('[BACKGROUND] YouTube Player continues in background');
+
+              // Try to acquire wake lock if available
+              if ('wakeLock' in navigator) {
+                navigator.wakeLock.request('screen').then(wakeLock => {
+                  console.log('[BACKGROUND] Wake lock acquired');
+                  this.wakeLock = wakeLock;
+                }).catch(err => {
+                  console.log('[BACKGROUND] Wake lock failed:', err);
+                });
+              }
+            }
+          } catch (e) {
+            console.warn('[BACKGROUND] Error maintaining YouTube Player:', e);
+          }
+        }
+
+        // For audio elements, configure for background playback
+        if (this.$refs.audioPlayer) {
+          const audio = this.$refs.audioPlayer;
+          audio.setAttribute('playsinline', '');
+          audio.preload = 'auto';
+
+          // Prevent browser from pausing audio
+          audio.addEventListener('pause', (e) => {
+            if (this.state.playing && !this.userPaused) {
+              console.log('[BACKGROUND] Preventing auto-pause, resuming...');
+              setTimeout(() => {
+                if (this.state.playing) {
+                  audio.play().catch(err => {
+                    console.warn('[BACKGROUND] Resume failed:', err);
+                  });
+                }
+              }, 100);
+            }
+          });
+
+          console.log('[BACKGROUND] Audio element configured for background play');
+        }
+
+        // Update media session for background controls
+        this.updateMediaSessionMetadata();
       }
     },
 
     // Handle app coming to foreground
     handleAppForeground() {
-      // App back in foreground
+      console.log('[FOREGROUND] App back in foreground');
+
+      // Clear background heartbeat
+      if (this.backgroundHeartbeat) {
+        clearInterval(this.backgroundHeartbeat);
+        this.backgroundHeartbeat = null;
+        console.log('[FOREGROUND] Background heartbeat cleared');
+      }
+
+      // Release wake lock if we had one
+      if (this.wakeLock) {
+        this.wakeLock.release();
+        this.wakeLock = null;
+        console.log('[FOREGROUND] Wake lock released');
+      }
 
       // Sync state with server
       this.wsSend('state:get', {});
@@ -6135,6 +6261,7 @@ new Vue({
       // Initialize background playback support
       this.initMediaSession();
       this.initVisibilityAPI();
+      this.setupBackgroundAudio();
 
       // Initialize wake lock for mobile devices
       if (this.isMobile) {

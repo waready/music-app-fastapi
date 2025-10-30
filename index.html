@@ -31,6 +31,10 @@
       --spotify-text: #ffffff;
       --spotify-text-subdued: #b3b3b3;
       --spotify-hover: #1a1a1a;
+
+      /* Mobile navigation bar detection variables */
+      --mobile-nav-offset: 0px;
+      --safe-area-bottom: env(safe-area-inset-bottom, 0px);
     }
 
     * {
@@ -499,7 +503,18 @@
     /* Queue item states */
     .song-item {
       position: relative;
-      overflow: hidden;
+      overflow: visible; /* Changed from hidden to visible for dropdowns */
+    }
+
+    /* Ensure dropdowns appear above other song items */
+    .song-item.dropdown-active {
+      z-index: 10101 !important;
+      position: relative;
+    }
+
+    /* Ensure dropdown container has proper positioning */
+    .song-item .song-actions > div[style*="position: relative"] {
+      z-index: 10102;
     }
 
     .song-item.processing {
@@ -766,8 +781,14 @@
 
       /* Show text in desktop */
       .desktop-only {
-        display: inline !important;
+        display: block !important;
         margin-left: 0.5rem;
+      }
+
+      /* Ensure song-actions stay in flex layout for desktop */
+      .song-actions.desktop-only {
+        display: flex !important;
+        margin-left: 0;
       }
 
       /* Hide mobile-only elements in desktop */
@@ -1011,14 +1032,48 @@
         margin: 0 0.25rem !important;
       }
 
-      /* Mobile Player Improvements */
+      /* Mobile Player Improvements with Navigation Bar Detection */
       .player {
         height: auto !important;
         min-height: 5rem;
         flex-direction: column !important;
         gap: 0.75rem !important;
         padding: 1rem !important;
-        padding-bottom: calc(1rem + env(safe-area-inset-bottom, 20px)) !important;
+        /* Multi-layer approach for navigation bar adaptation */
+        padding-bottom: calc(1rem + var(--safe-area-bottom) + var(--mobile-nav-offset)) !important;
+        /* Ensure controls are never hidden */
+        position: relative !important;
+        z-index: 100 !important;
+      }
+
+      /* Enhanced support for devices with navigation bars */
+      @supports (padding: max(0px)) {
+        .player {
+          padding-bottom: max(calc(1rem + var(--safe-area-bottom)), calc(1rem + var(--mobile-nav-offset)), 20px) !important;
+        }
+      }
+
+      /* Additional mobile adaptations for specific scenarios */
+
+      /* Android devices with traditional navigation buttons */
+      @media screen and (max-height: 640px) and (orientation: landscape) {
+        .player {
+          padding-bottom: calc(1rem + var(--safe-area-bottom) + var(--mobile-nav-offset) + 10px) !important;
+        }
+      }
+
+      /* iOS devices with home indicator */
+      @supports (padding-bottom: env(safe-area-inset-bottom)) {
+        .player {
+          padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px) + var(--mobile-nav-offset)) !important;
+        }
+      }
+
+      /* Ensure player controls stay visible during fullscreen */
+      .player:fullscreen,
+      .player:-webkit-full-screen,
+      .player:-moz-full-screen {
+        padding-bottom: calc(1rem + 30px) !important;
       }
 
       .player-info {
@@ -1146,6 +1201,65 @@
         width: 100%;
         box-sizing: border-box;
         flex-wrap: wrap;
+      }
+
+      /* Mobile playlist dropdown positioning */
+      .results-section .song-item .song-actions > div[style*="position: relative"] {
+        position: static !important;
+      }
+
+      .results-section .song-item .song-actions div[style*="background: var(--spotify-light-gray)"] {
+        position: fixed !important;
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -50%) !important;
+        z-index: 10200 !important;
+        min-width: 250px !important;
+        max-width: 90vw !important;
+        max-height: 60vh !important;
+        overflow-y: auto !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8) !important;
+        border: 1px solid var(--spotify-gray) !important;
+      }
+
+      /* Improve mobile touch targets and spacing */
+      .results-section .song-item .mobile-only .control-btn {
+        min-width: 44px !important;
+        min-height: 44px !important;
+        padding: 0.75rem !important;
+        margin: 0.125rem !important;
+        touch-action: manipulation;
+      }
+
+      .results-section .song-item .mobile-only {
+        gap: 0.5rem !important;
+        padding-top: 0.5rem !important;
+      }
+
+      /* Make playlist dropdown items larger and easier to tap */
+      .song-actions div[style*="background: var(--spotify-light-gray)"] div[style*="padding: 0.5rem"] {
+        padding: 1rem !important;
+        font-size: 1rem !important;
+        min-height: 48px !important;
+        display: flex !important;
+        align-items: center !important;
+        border-radius: 0.5rem !important;
+        margin-bottom: 0.25rem !important;
+      }
+
+      /* Style the playlist dropdown title/header in mobile */
+      .song-actions div[style*="background: var(--spotify-light-gray)"] div[style*="text-align: center"] {
+        padding: 1rem !important;
+        font-size: 1rem !important;
+      }
+
+      /* Make "Crear playlist" button larger in mobile */
+      .song-actions div[style*="background: var(--spotify-light-gray)"] button[style*="color: var(--spotify-green)"] {
+        padding: 0.75rem 1rem !important;
+        font-size: 1rem !important;
+        min-height: 44px !important;
+        border-radius: 0.375rem !important;
+        border: 1px solid var(--spotify-green) !important;
       }
 
       /* Mobile responsive for individual song buttons */
@@ -1781,7 +1895,7 @@
                           </svg>
                         </button>
 
-                        <div v-show="song._showPlaylists" style="position: absolute; top: 100%; left: 0; background: var(--spotify-light-gray); border-radius: 0.375rem; padding: 0.5rem; min-width: 150px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                        <div v-show="song._showPlaylists" style="position: absolute; top: 100%; left: 0; background: var(--spotify-light-gray); border-radius: 0.375rem; padding: 0.5rem; min-width: 150px; z-index: 10100; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
                           <div v-if="!playlists.length" style="color: var(--spotify-text-subdued); font-size: 0.75rem; text-align: center; padding: 0.5rem;">
                             <p>No hay playlists</p>
                             <button @click.stop="showCreatePlaylist = true; song._showPlaylists = false" style="color: var(--spotify-green); background: none; border: none; cursor: pointer; margin-top: 0.25rem; font-size: 0.75rem;">
@@ -1833,7 +1947,7 @@
                         </svg>
                       </button>
 
-                      <div v-show="song._showPlaylists" style="position: absolute; top: 100%; left: 0; background: var(--spotify-light-gray); border-radius: 0.375rem; padding: 0.5rem; min-width: 150px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                      <div v-show="song._showPlaylists" style="position: absolute; top: 100%; left: 0; background: var(--spotify-light-gray); border-radius: 0.375rem; padding: 0.5rem; min-width: 150px; z-index: 10100; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
                         <div v-if="!playlists.length" style="color: var(--spotify-text-subdued); font-size: 0.75rem; text-align: center; padding: 0.5rem;">
                           <p>No hay playlists</p>
                           <button @click.stop="showCreatePlaylist = true; song._showPlaylists = false" style="color: var(--spotify-green); background: none; border: none; cursor: pointer; margin-top: 0.25rem; font-size: 0.75rem;">
@@ -2773,6 +2887,80 @@ new Vue({
 
       console.log(`[HYBRID] Mobile device detected: ${this.isMobile}`);
       return this.isMobile;
+    },
+
+    detectMobileNavigationBar() {
+      if (!this.isMobile) return;
+
+      // Multiple detection methods for mobile navigation bars
+      let navBarOffset = 0;
+      const root = document.documentElement;
+
+      // Method 1: Safe area detection (iOS and newer Android)
+      const safeAreaBottom = getComputedStyle(root).getPropertyValue('--safe-area-bottom');
+      if (safeAreaBottom && safeAreaBottom !== '0px') {
+        console.log(`[MOBILE-NAV] Safe area detected: ${safeAreaBottom}`);
+        return; // Safe area is already handled by CSS
+      }
+
+      // Method 2: Viewport height vs window height comparison
+      const viewportHeight = window.innerHeight;
+      const screenHeight = window.screen.height;
+      const heightDifference = screenHeight - viewportHeight;
+
+      // Method 3: User agent specific detection
+      const userAgent = navigator.userAgent.toLowerCase();
+      const isAndroid = userAgent.includes('android');
+      const isChrome = userAgent.includes('chrome');
+      const isSamsung = userAgent.includes('samsung');
+
+      // Android devices often have navigation bars
+      if (isAndroid) {
+        // Modern Android with gesture navigation typically has smaller offset
+        // Traditional Android with button navigation has larger offset
+        if (heightDifference > 100) {
+          navBarOffset = Math.min(heightDifference * 0.3, 80); // Cap at 80px
+        } else if (heightDifference > 50) {
+          navBarOffset = 50; // Gesture navigation
+        } else {
+          navBarOffset = 20; // Minimal padding for safety
+        }
+
+        // Samsung devices often need more padding
+        if (isSamsung) {
+          navBarOffset += 10;
+        }
+      }
+
+      // Method 4: Dynamic detection with resize events
+      const handleResize = () => {
+        const newViewportHeight = window.innerHeight;
+        const newHeightDiff = window.screen.height - newViewportHeight;
+
+        if (Math.abs(newHeightDiff - heightDifference) > 50) {
+          // Navigation bar visibility changed
+          const dynamicOffset = Math.max(20, Math.min(newHeightDiff * 0.2, 60));
+          root.style.setProperty('--mobile-nav-offset', `${dynamicOffset}px`);
+          console.log(`[MOBILE-NAV] Dynamic adjustment: ${dynamicOffset}px`);
+        }
+      };
+
+      // Set initial offset
+      if (navBarOffset > 0) {
+        root.style.setProperty('--mobile-nav-offset', `${navBarOffset}px`);
+        console.log(`[MOBILE-NAV] Navigation bar offset set: ${navBarOffset}px`);
+      }
+
+      // Listen for orientation and resize changes
+      window.addEventListener('resize', handleResize, { passive: true });
+      window.addEventListener('orientationchange', () => {
+        setTimeout(handleResize, 300); // Delay for orientation change completion
+      }, { passive: true });
+
+      // Additional check for fullscreen changes (affects navigation bar visibility)
+      document.addEventListener('fullscreenchange', handleResize, { passive: true });
+
+      console.log(`[MOBILE-NAV] Detection complete - Offset: ${navBarOffset}px, Height diff: ${heightDifference}px`);
     },
 
     // Detectar bloqueador de anuncios
@@ -4971,10 +5159,7 @@ new Vue({
         // Force UI update to show downloading status
         this.$forceUpdate();
 
-        // Start polling for progress immediately
-        this.pollDownloadProgress(songId);
-
-        // Start the download
+        // Start the download first, then poll only if needed
         const response = await fetch('/api/download', {
           method: 'POST',
           headers: {
@@ -4999,6 +5184,10 @@ new Vue({
 
           // Force UI update
           this.$forceUpdate();
+        } else {
+          // Only start polling if download request failed and we need to wait
+          console.log('Download request failed, starting polling...');
+          this.pollDownloadProgress(songId);
         }
 
       } catch (error) {
@@ -5504,6 +5693,19 @@ new Vue({
 
       // Toggle el dropdown actual
       song._showPlaylists = !song._showPlaylists;
+
+      // Add/remove dropdown-active class for z-index management
+      this.$nextTick(() => {
+        const songElements = document.querySelectorAll('.song-item');
+        songElements.forEach(el => {
+          const songId = el.getAttribute('data-song-id');
+          if (songId === song.id.videoId && song._showPlaylists) {
+            el.classList.add('dropdown-active');
+          } else {
+            el.classList.remove('dropdown-active');
+          }
+        });
+      });
     },
 
     closeAllDropdowns() {
@@ -5513,6 +5715,15 @@ new Vue({
           song._showPlaylists = false;
         }
       });
+
+      // Remove dropdown-active class from all song items
+      this.$nextTick(() => {
+        const songElements = document.querySelectorAll('.song-item.dropdown-active');
+        songElements.forEach(el => {
+          el.classList.remove('dropdown-active');
+        });
+      });
+
       this.$forceUpdate();
     },
 
@@ -5765,6 +5976,7 @@ new Vue({
 
       // Detectar tipo de dispositivo primero
       this.detectMobileDevice();
+      this.detectMobileNavigationBar();
       this.setupUserInteractionHandlers();
 
       // Initialize background playback support
@@ -5924,6 +6136,23 @@ new Vue({
     this.refreshQueue();
     setTimeout(this.refreshQueue, 1200);
     setTimeout(this.refreshQueue, 3000);
+
+    // Add click outside event listener to close dropdowns
+    document.addEventListener('click', (event) => {
+      // Check if click is on a playlist button or inside a dropdown
+      const isPlaylistButton = event.target.closest('button.playlist-btn') ||
+                               event.target.closest('button[class*="playlist"]') ||
+                               (event.target.closest('.control-btn') &&
+                                event.target.closest('.control-btn').querySelector('svg path[d*="M14 10H2v2h12v-2"]'));
+
+      const isDropdownContent = event.target.closest('div[v-show*="_showPlaylists"]') ||
+                               event.target.closest('div[style*="background: var(--spotify-light-gray)"]');
+
+      // If click is outside both the button and dropdown content, close all dropdowns
+      if (!isPlaylistButton && !isDropdownContent) {
+        this.closeAllDropdowns();
+      }
+    });
   },
 
   beforeDestroy() {

@@ -1039,8 +1039,10 @@
         flex-direction: column !important;
         gap: 0.75rem !important;
         padding: 1rem !important;
+        /* Emergency fallback: Start with significant padding to ensure visibility */
+        padding-bottom: 100px !important;
         /* Multi-layer approach for navigation bar adaptation */
-        padding-bottom: calc(1rem + var(--safe-area-bottom) + var(--mobile-nav-offset)) !important;
+        margin-bottom: calc(var(--safe-area-bottom) + var(--mobile-nav-offset)) !important;
         /* Ensure controls are never hidden */
         position: relative !important;
         z-index: 100 !important;
@@ -1049,23 +1051,39 @@
       /* Enhanced support for devices with navigation bars */
       @supports (padding: max(0px)) {
         .player {
-          padding-bottom: max(calc(1rem + var(--safe-area-bottom)), calc(1rem + var(--mobile-nav-offset)), 20px) !important;
+          padding-bottom: max(100px, calc(2rem + var(--safe-area-bottom)), calc(2rem + var(--mobile-nav-offset))) !important;
         }
       }
 
       /* Additional mobile adaptations for specific scenarios */
 
+      /* EMERGENCY: Extreme padding for Android devices */
+      @media screen and (max-width: 768px) {
+        .player {
+          padding-bottom: 120px !important;
+          margin-bottom: 20px !important;
+        }
+      }
+
       /* Android devices with traditional navigation buttons */
       @media screen and (max-height: 640px) and (orientation: landscape) {
         .player {
-          padding-bottom: calc(1rem + var(--safe-area-bottom) + var(--mobile-nav-offset) + 10px) !important;
+          padding-bottom: 140px !important;
+        }
+      }
+
+      /* Portrait mode - most common scenario */
+      @media screen and (max-width: 768px) and (orientation: portrait) {
+        .player {
+          padding-bottom: 120px !important;
+          margin-bottom: 30px !important;
         }
       }
 
       /* iOS devices with home indicator */
       @supports (padding-bottom: env(safe-area-inset-bottom)) {
         .player {
-          padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px) + var(--mobile-nav-offset)) !important;
+          padding-bottom: max(120px, calc(2rem + env(safe-area-inset-bottom, 0px) + var(--mobile-nav-offset))) !important;
         }
       }
 
@@ -1073,7 +1091,7 @@
       .player:fullscreen,
       .player:-webkit-full-screen,
       .player:-moz-full-screen {
-        padding-bottom: calc(1rem + 30px) !important;
+        padding-bottom: 80px !important;
       }
 
       .player-info {
@@ -2900,7 +2918,8 @@ new Vue({
       const safeAreaBottom = getComputedStyle(root).getPropertyValue('--safe-area-bottom');
       if (safeAreaBottom && safeAreaBottom !== '0px') {
         console.log(`[MOBILE-NAV] Safe area detected: ${safeAreaBottom}`);
-        return; // Safe area is already handled by CSS
+        // Don't return early - still set additional offset for safety
+        navBarOffset = 60; // Base offset even with safe area
       }
 
       // Method 2: Viewport height vs window height comparison
@@ -2914,22 +2933,28 @@ new Vue({
       const isChrome = userAgent.includes('chrome');
       const isSamsung = userAgent.includes('samsung');
 
+      // EMERGENCY: Always assume navigation bar exists on mobile
+      // Set aggressive defaults that ensure visibility
+      navBarOffset = 80; // Start with large default
+
       // Android devices often have navigation bars
       if (isAndroid) {
-        // Modern Android with gesture navigation typically has smaller offset
-        // Traditional Android with button navigation has larger offset
+        // Be more aggressive with Android detection
         if (heightDifference > 100) {
-          navBarOffset = Math.min(heightDifference * 0.3, 80); // Cap at 80px
+          navBarOffset = 120; // Increased from 80px max
         } else if (heightDifference > 50) {
-          navBarOffset = 50; // Gesture navigation
+          navBarOffset = 100; // Increased from 50px
         } else {
-          navBarOffset = 20; // Minimal padding for safety
+          navBarOffset = 80; // Increased from 20px
         }
 
         // Samsung devices often need more padding
         if (isSamsung) {
-          navBarOffset += 10;
+          navBarOffset += 20; // Increased from 10px
         }
+      } else {
+        // For non-Android (iOS, etc.) also provide significant padding
+        navBarOffset = 60;
       }
 
       // Method 4: Dynamic detection with resize events

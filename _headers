@@ -1,0 +1,65 @@
+# Cache Control Headers for Render.com deployment
+# This file tells Render how to handle caching for different file types
+
+# HTML files - Never cache, always get fresh version
+/*.html
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+  Expires: 0
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+
+# Main index file - Force fresh download
+/
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+  Expires: 0
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+
+# API endpoints - Never cache
+/api/*
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+  Expires: 0
+
+# WebSocket endpoints - Never cache
+/ws/*
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+
+# Dynamic content - Never cache
+/ready/*
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+
+# Static assets - Short cache for quick updates
+/*.css
+  Cache-Control: public, max-age=300
+
+/*.js
+  Cache-Control: public, max-age=300
+
+# Images and icons - Moderate cache but allow updates
+/*.ico
+  Cache-Control: public, max-age=3600
+
+/*.png
+  Cache-Control: public, max-age=3600
+
+/*.jpg
+  Cache-Control: public, max-age=3600
+
+/*.jpeg
+  Cache-Control: public, max-age=3600
+
+# Fonts - Can cache longer
+/*.woff2
+  Cache-Control: public, max-age=86400
+
+/*.woff
+  Cache-Control: public, max-age=86400
+
+# JSON files - Short cache
+/*.json
+  Cache-Control: public, max-age=300

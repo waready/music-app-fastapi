@@ -10,6 +10,13 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#121212">
 
+  <!-- Cache Control and Versioning -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="version" content="1.1.1">
+  <meta name="build-time" content="2025-10-30-19-38">
+
   <title>Music Player - Spotify Style</title>
   <link href="https://fonts.googleapis.com/css2?family=Circular+Std:wght@400;500;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
@@ -19,6 +26,127 @@
   <script>
     // Detectar si podemos usar youtube-dl (navegadores modernos)
     window.supportsYoutubeDL = typeof Worker !== 'undefined' && typeof WebAssembly !== 'undefined';
+
+    // Cache Busting and Version Management
+    (function() {
+      const APP_VERSION = '1.1.1';
+      const BUILD_TIME = '2025-10-30-19-38';
+
+      // Store current version info
+      window.APP_INFO = {
+        version: APP_VERSION,
+        buildTime: BUILD_TIME,
+        timestamp: Date.now()
+      };
+
+      // Check if we need to clear cache
+      function checkAndClearCache() {
+        try {
+          const storedVersion = localStorage.getItem('app_version');
+          const storedBuildTime = localStorage.getItem('app_build_time');
+
+          console.log(`[CACHE] Current: v${APP_VERSION} (${BUILD_TIME})`);
+          console.log(`[CACHE] Stored: v${storedVersion} (${storedBuildTime})`);
+
+          if (storedVersion !== APP_VERSION || storedBuildTime !== BUILD_TIME) {
+            console.log('[CACHE] New version detected - clearing cache...');
+
+            // Clear localStorage except essential data
+            const preserve = ['playlists', 'volume', 'currentRoom'];
+            const toPreserve = {};
+            preserve.forEach(key => {
+              const value = localStorage.getItem(key);
+              if (value) toPreserve[key] = value;
+            });
+
+            localStorage.clear();
+
+            // Restore preserved data
+            Object.keys(toPreserve).forEach(key => {
+              localStorage.setItem(key, toPreserve[key]);
+            });
+
+            // Clear sessionStorage
+            sessionStorage.clear();
+
+            // Store new version info
+            localStorage.setItem('app_version', APP_VERSION);
+            localStorage.setItem('app_build_time', BUILD_TIME);
+            localStorage.setItem('cache_cleared_at', new Date().toISOString());
+
+            // Clear browser cache if possible
+            if ('caches' in window) {
+              caches.keys().then(names => {
+                names.forEach(name => {
+                  caches.delete(name);
+                });
+              });
+            }
+
+            console.log('[CACHE] Cache cleared successfully');
+
+            // Show notification to user
+            setTimeout(() => {
+              if (window.Vue && window.app && window.app.showNotification) {
+                window.app.showNotification('🔄 Aplicación actualizada a la última versión');
+              }
+            }, 2000);
+          } else {
+            console.log('[CACHE] Version is current - no cache clearing needed');
+          }
+        } catch (error) {
+          console.error('[CACHE] Error managing cache:', error);
+        }
+      }
+
+      // Force reload if stuck on old version
+      function forceReloadIfOld() {
+        const lastReload = sessionStorage.getItem('last_force_reload');
+        const now = Date.now();
+
+        // Only force reload once per session and if more than 5 minutes since last reload
+        if (!lastReload || (now - parseInt(lastReload)) > 300000) {
+          const pageLoadTime = performance.now();
+
+          // If page loads unusually fast, it might be cached
+          if (pageLoadTime < 100) {
+            console.log('[CACHE] Fast load detected - checking for updates...');
+            sessionStorage.setItem('last_force_reload', now.toString());
+
+            // Add cache-busting parameter and reload
+            setTimeout(() => {
+              const url = new URL(window.location);
+              url.searchParams.set('v', APP_VERSION);
+              url.searchParams.set('t', Date.now());
+
+              if (url.toString() !== window.location.toString()) {
+                console.log('[CACHE] Forcing reload with cache busting...');
+                window.location.href = url.toString();
+              }
+            }, 1000);
+          }
+        }
+      }
+
+      // Run cache management when DOM is ready
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+          checkAndClearCache();
+          forceReloadIfOld();
+        });
+      } else {
+        checkAndClearCache();
+        forceReloadIfOld();
+      }
+
+      // Also run on page visibility change (mobile browsers)
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          setTimeout(checkAndClearCache, 500);
+        }
+      });
+
+    })();
   </script>
   <style>
     :root {
